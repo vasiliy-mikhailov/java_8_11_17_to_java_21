@@ -6,7 +6,7 @@
 2. **Containment:** all language toolchains (JDK / Maven / Gradle / OpenRewrite) and recipe execution run inside Docker.
 3. **Access:** SSH to the work host is multiplexed (ControlMaster + ControlPath + ControlPersist) so every call in a session reuses one TCP + auth handshake instead of dialling out per command.
 4. **Fitness (recipe):** find the OpenRewrite recipe composition that produces the highest-quality Java 21 conversion of every repo in `java21-migration-dataset.json` — where "high quality" is whatever the agent reasons it should mean in this domain. Crafted through a ralph loop (apply → check → improve), with trajectory and per-recipe-by-cell contribution as first-class outputs.
-5. **Fitness (vLLM spin-up):** stand up the endpoint until all four observables hold; arrive there through a ralph loop (try → check → adjust) over container flags, model args, mounts, and reverse-proxy config. Caddy is the existing front door on `:443` terminating TLS for `inference.mikhailov.tech` — fix it in place rather than introducing a second proxy.
+5. **Fitness (vLLM spin-up):** stand up the endpoint until all four observables hold; arrive there through a ralph loop (try → check → adjust) over container flags, model args, mounts, and reverse-proxy config. An existing Caddy already owns `:443` on this host for other services.
    - `curl https://inference.mikhailov.tech/v1/models` lists `qwen3.6-27b-fp8`.
    - Weights loaded from `/mnt/steam/forge/shared/models`, no re-download.
    - Tool-call smoke returns parsed `tool_calls` (parser: `qwen3_xml`).
