@@ -175,6 +175,8 @@ log "per-recipe rows: $(( $(wc -l < "$OUT_DIR/per_recipe.csv") - 1 ))"
 # recipe_applied = anything changed in the source tree
 diff_files=$(git status --porcelain | wc -l | tr -d ' ')
 [ "$diff_files" -gt 0 ] && recipe_applied=1
+# Save the unified diff so a post-step judge (qwen_judge.py) can score it.
+git diff --no-color > "$OUT_DIR/diff.patch" 2>/dev/null || true
 
 # --- post-recipe build on JDK 21 ---
 export JAVA_HOME="/opt/jdk/21"

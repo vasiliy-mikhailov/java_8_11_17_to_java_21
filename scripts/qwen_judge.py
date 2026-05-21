@@ -135,15 +135,18 @@ def judge(repo_id: str, java_version: int, dependency_family: str, diff: str) ->
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("repo_dir", type=Path,
-                   help="Working tree with recipe diff in place.")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--repo-dir", type=Path,
+                   help="Working tree with recipe diff in place (uses git diff).")
+    g.add_argument("--diff-file", type=Path,
+                   help="Pre-saved unified diff (e.g. iter-NNN/results/<rid>/diff.patch).")
     p.add_argument("--repo-id",          required=True)
     p.add_argument("--java-version",     type=int, required=True)
     p.add_argument("--dependency-family", required=True)
     p.add_argument("--out", type=Path, default=None)
     args = p.parse_args()
 
-    diff = git_diff(args.repo_dir)
+    diff = git_diff(args.repo_dir) if args.repo_dir else args.diff_file.read_text()
     if not diff.strip():
         result = {
             "idiomatic_java21": 1, "antipattern_clearance": 1, "diff_coherence": 1,
