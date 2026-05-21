@@ -63,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--proposals", type=int, default=5)
     parser.add_argument("--plateau-eps", type=float, default=0.02)
     parser.add_argument("--plateau-window", type=int, default=3)
+    parser.add_argument("--rng-seed", type=int, default=0xC0FFEE,
+                        help="RNG seed for the mutator; differing seeds enable multi-start.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Skip Docker; use a synthetic fitness function "
                              "(useful for unit testing the loop).")
@@ -138,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         plateau_eps=args.plateau_eps,
         plateau_window=args.plateau_window,
         max_iter=args.max_iter,
+        seed=args.rng_seed,
     )
     climber = HillClimber(pool=pool, seed_candidate=seed, fitness=fitness, cfg=cfg)
     result = climber.run()

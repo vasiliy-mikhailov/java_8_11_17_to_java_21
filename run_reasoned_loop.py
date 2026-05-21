@@ -20,7 +20,7 @@ from orchestrator.reasoned_fitness import make_fitness
 
 
 HERE = Path(__file__).parent
-DATASET = HERE.parent / "java21-migration-dataset.json"
+DATASET = HERE / "java21-migration-dataset.json"
 POOL = HERE / "recipes" / "pool.yml"
 SEED = HERE / "recipes" / "seed-weak.yml"
 OUT_DIR = HERE / "ralph-run"

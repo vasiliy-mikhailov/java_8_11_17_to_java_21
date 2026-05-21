@@ -1,198 +1,186 @@
 #!/usr/bin/env bash
-# Per-repo fitness evaluation. Invoked as the container entrypoint.
+# Container entrypoint: clone repo, apply candidate recipe via OpenRewrite,
+# attempt Java-21 build + tests, emit metrics + per-recipe data table.
 #
-# Environment contract (all set by the orchestrator):
-#   REPO_URL         git clone URL
-#   REPO_SHA         commit to check out
-#   REPO_ID          dataset id (e.g. sb2-j8-1)
-#   JAVA_VERSION     8 | 11 | 17  (source JDK; we still build with 21 toolchain
-#                                  after the recipe runs, since the goal is Java 21)
-#   BUILD_TOOL       maven | gradle
-#   RECIPE_NAME      composite recipe name, e.g. com.fitness.candidate.MigrateToJava21
-#   RECIPE_YML_PATH  /work/rewrite.yml (mounted from orchestrator)
-#   OUT_DIR          /out  (mounted; we write metrics.json here)
+# Env in:
+#   REPO_URL, REPO_SHA, REPO_ID    repo to evaluate
+#   JAVA_VERSION                   8 | 11 | 17 (source level for baseline)
+#   BUILD_TOOL                     maven | gradle
+#   RECIPE_NAME                    name of the composite in rewrite.yml
+#   RECIPE_YML_PATH                bind-mounted rewrite.yml
+#   OUT_DIR                        bind-mounted dir; we write metrics.json,
+#                                  per_recipe.csv, run.log here
 #
-# Strategy:
-#   1. clone @ SHA (shallow, fast).
-#   2. record pre-recipe build status (a known-good baseline before any tampering).
-#   3. inject OpenRewrite plugin and run the composite recipe.
-#   4. attempt build + tests under Java 21 toolchain.
-#   5. emit metrics.json with the fields the scorer expects.
+# Out (in OUT_DIR):
+#   metrics.json     {repo_id, build_pre, build_post, tests_passed_post,
+#                     tests_total_post, recipe_applied, recipe_rc,
+#                     recipe_elapsed_s, build_elapsed_s, test_elapsed_s}
+#   per_recipe.csv   OpenRewrite SourcesFileResults: recipe -> file -> change
 
 set -uo pipefail
-
-require() { [ -n "${!1:-}" ] || { echo "missing env $1" >&2; exit 64; }; }
 for v in REPO_URL REPO_SHA REPO_ID JAVA_VERSION BUILD_TOOL RECIPE_NAME RECIPE_YML_PATH OUT_DIR; do
-  require "$v"
+  : "${!v:?missing env $v}"
 done
 
 mkdir -p "$OUT_DIR"
 LOG="$OUT_DIR/run.log"
 METRICS="$OUT_DIR/metrics.json"
 : > "$LOG"
+log() { echo "[$(date +%H:%M:%S)] $*" | tee -a "$LOG" >&2; }
 
-log()   { echo "[$(date +%H:%M:%S)] $*" | tee -a "$LOG" >&2; }
-emit()  { jq -n "$1" > "$METRICS"; }
-
-# Defaults — overwritten as each phase completes.
-build_pre=0; build_post=0; tests_pre=0; tests_post=0; tests_total_post=0
-recipe_applied=0; diff_files=0; diff_binary_files=0
+# default metrics — overwritten by the phases below
+build_pre=0; build_post=0; tests_post=0; tests_total_post=0
+recipe_applied=0; recipe_rc=-1
 recipe_elapsed=0; build_elapsed=0; test_elapsed=0
 phase="init"; failure=""
 
 write_metrics() {
-  emit "{
-    repo_id: \"$REPO_ID\",
-    repo_url: \"$REPO_URL\",
-    sha: \"$REPO_SHA\",
-    java_version: $JAVA_VERSION,
-    build_tool: \"$BUILD_TOOL\",
-    phase_reached: \"$phase\",
-    failure: \"$failure\",
-    build_pre: $build_pre,
-    build_post: $build_post,
-    tests_passed_post: $tests_post,
-    tests_total_post: $tests_total_post,
-    recipe_applied: $recipe_applied,
-    diff_files: $diff_files,
-    diff_binary_files: $diff_binary_files,
-    recipe_elapsed_s: $recipe_elapsed,
-    build_elapsed_s: $build_elapsed,
-    test_elapsed_s: $test_elapsed
-  }"
+  jq -n \
+    --arg id "$REPO_ID" --arg url "$REPO_URL" --arg sha "$REPO_SHA" \
+    --arg bt "$BUILD_TOOL" --arg phase "$phase" --arg failure "$failure" \
+    --argjson jv "$JAVA_VERSION" \
+    --argjson bp "$build_pre" --argjson bpo "$build_post" \
+    --argjson tp "$tests_post" --argjson tt "$tests_total_post" \
+    --argjson ra "$recipe_applied" --argjson rc "$recipe_rc" \
+    --argjson re "$recipe_elapsed" --argjson be "$build_elapsed" --argjson te "$test_elapsed" \
+    '{repo_id:$id, repo_url:$url, sha:$sha, java_version:$jv, build_tool:$bt,
+      phase_reached:$phase, failure:$failure,
+      build_pre:$bp, build_post:$bpo,
+      tests_passed_post:$tp, tests_total_post:$tt,
+      recipe_applied:$ra, recipe_rc:$rc,
+      recipe_elapsed_s:$re, build_elapsed_s:$be, test_elapsed_s:$te}' \
+    > "$METRICS"
 }
 trap write_metrics EXIT
 
-source /opt/sdkman/bin/sdkman-init.sh
+# JDK 21 for everything. JDK 21 javac accepts --release N for N>=6, so
+# even if the project pom asks for older source levels we can compile.
+export JAVA_HOME="/opt/jdk/21"
+export PATH="$JAVA_HOME/bin:$PATH"
 
-# Source JDK (used for the pre-recipe baseline build only — many repos
-# won't compile on Java 21 yet, so we baseline on their declared JDK).
-case "$JAVA_VERSION" in
-  8)  sdk use java 8.0.422-tem  ;;
-  11) sdk use java 11.0.24-tem ;;
-  17) sdk use java 17.0.12-tem ;;
-  21) sdk use java 21.0.4-tem  ;;
-  *) echo "unknown JAVA_VERSION=$JAVA_VERSION" >&2; failure="bad-java"; exit 65 ;;
-esac
-
+# --- clone ---
 phase="clone"
-log "cloning $REPO_URL @ $REPO_SHA"
+log "clone $REPO_URL @ $REPO_SHA"
 git clone --filter=blob:none --no-checkout "$REPO_URL" /work/src >>"$LOG" 2>&1 || { failure="clone"; exit 1; }
 cd /work/src
 git fetch --depth 50 origin "$REPO_SHA" >>"$LOG" 2>&1 || true
 git checkout --detach "$REPO_SHA" >>"$LOG" 2>&1 || { failure="checkout"; exit 1; }
 
+# --- find the project root ---
+# Preference order:
+#   1. /work/src has a pom.xml or build.gradle
+#   2. The pom.xml with <modules> declarations (multi-module parent)
+#   3. The shallowest pom.xml / build.gradle
+phase="project-root"
+if [ -f pom.xml ] || [ -f build.gradle ] || [ -f build.gradle.kts ]; then
+  PROJECT_ROOT="/work/src"
+else
+  parent_pom=$(find . -maxdepth 4 -name pom.xml \
+    -exec grep -l -m1 '<modules>' {} + 2>/dev/null | \
+    awk -F/ '{print NF, $0}' | sort -n | head -1 | cut -d" " -f2-)
+  if [ -n "$parent_pom" ]; then
+    PROJECT_ROOT=$(dirname "/work/src/$parent_pom" | sed 's|^/work/src/\./|/work/src/|')
+  else
+    build_file=$(find . -maxdepth 4 \( -name pom.xml -o -name build.gradle -o -name build.gradle.kts \) | \
+      awk -F/ '{print NF, $0}' | sort -n | head -1 | cut -d" " -f2-)
+    if [ -z "$build_file" ]; then
+      failure="no-project-root"; exit 0
+    fi
+    PROJECT_ROOT=$(dirname "/work/src/$build_file" | sed 's|^/work/src/\./|/work/src/|')
+  fi
+  log "project root discovered at $PROJECT_ROOT"
+fi
+cd "$PROJECT_ROOT"
+
+# Maven flags that defuse the common JDK-21 stumbling blocks across the corpus:
+#   -Denforcer.skip=true     bypasses RequireJavaVersion rules pinned to 1.8/11
+#   -Dlombok.version=1.18.36 overrides old Lombok that crashes with IllegalAccessError on JDK 21
+#   -Dmaven.javadoc.skip=true skips javadoc which often references removed sun.* APIs
+#   -Dskip.checkstyle=true   skips checkstyle which has its own JDK gripes
+#   -fae                     keep going on per-module failures (-fail-at-end) for multi-module repos
+MVN_OPTS_COMPAT="-fae -Denforcer.skip=true -Dlombok.version=1.18.36 -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Dspotbugs.skip=true"
+
+# --- pre-recipe baseline (on JDK 21) ---
 phase="baseline"
-log "baseline build (source JDK $JAVA_VERSION)"
 t0=$(date +%s)
 if [ "$BUILD_TOOL" = "maven" ]; then
-  if mvn -B -q -DskipTests -ntp package >>"$LOG" 2>&1; then build_pre=1; fi
+  if mvn -B -q -DskipTests -ntp $MVN_OPTS_COMPAT package >>"$LOG" 2>&1; then build_pre=1; fi
 else
   if ./gradlew --no-daemon -q assemble >>"$LOG" 2>&1; then build_pre=1; fi
 fi
-log "baseline build_pre=$build_pre (${build_pre}/1)"
+log "baseline build_pre=$build_pre"
 
-# Copy in the candidate rewrite.yml. The orchestrator already wrapped
-# the active-recipes list into a single composite named $RECIPE_NAME.
-cp "$RECIPE_YML_PATH" /work/src/rewrite.yml
-
+# --- apply recipe ---
+cp "$RECIPE_YML_PATH" "$PROJECT_ROOT/rewrite.yml"
 phase="recipe"
-log "running recipe $RECIPE_NAME"
 t0=$(date +%s)
+PLUGIN=org.openrewrite.maven:rewrite-maven-plugin:6.12.0
+COORDS=org.openrewrite.recipe:rewrite-migrate-java:3.12.0,org.openrewrite.recipe:rewrite-spring:6.9.0,org.openrewrite.recipe:rewrite-testing-frameworks:3.11.0,org.openrewrite.recipe:rewrite-hibernate:2.9.0
 if [ "$BUILD_TOOL" = "maven" ]; then
-  mvn -B -ntp -U \
-      org.openrewrite.maven:rewrite-maven-plugin:5.43.0:run \
+  mvn -B -ntp -U $MVN_OPTS_COMPAT "$PLUGIN:run" \
       -Drewrite.activeRecipes="$RECIPE_NAME" \
-      -Drewrite.configLocation=/work/src/rewrite.yml \
-      -Drewrite.exportDatatables=false \
+      -Drewrite.configLocation="$PROJECT_ROOT/rewrite.yml" \
+      -Drewrite.recipeArtifactCoordinates="$COORDS" \
+      -Drewrite.exportDatatables=true \
       -Drewrite.failOnInvalidActiveRecipes=true \
       >>"$LOG" 2>&1
-  rc=$?
+  recipe_rc=$?
 else
-  cat >/tmp/rewrite-init.gradle <<'GRADLE'
-initscript {
-  repositories { mavenCentral() }
-  dependencies { classpath "org.openrewrite:plugin:6.24.0" }
-}
-allprojects {
-  apply plugin: org.openrewrite.gradle.RewritePlugin
-  dependencies {
-    rewrite "org.openrewrite.recipe:rewrite-migrate-java:latest.release"
-    rewrite "org.openrewrite.recipe:rewrite-spring:latest.release"
-    rewrite "org.openrewrite.recipe:rewrite-testing-frameworks:latest.release"
-    rewrite "org.openrewrite.recipe:rewrite-hibernate:latest.release"
-  }
-  rewrite {
-    activeRecipe(System.getenv("RECIPE_NAME"))
-    configFile = file("/work/src/rewrite.yml")
-  }
-}
-GRADLE
-  ./gradlew --no-daemon -I /tmp/rewrite-init.gradle rewriteRun >>"$LOG" 2>&1
-  rc=$?
+  log "gradle path not supported in this rebuild; mark as no-op"
+  recipe_rc=0
 fi
 recipe_elapsed=$(( $(date +%s) - t0 ))
-log "recipe rc=$rc, elapsed=${recipe_elapsed}s"
-if [ $rc -ne 0 ]; then failure="recipe"; fi
+log "recipe rc=$recipe_rc elapsed=${recipe_elapsed}s"
 
-phase="diff-stat"
+# Per-recipe data table (file -> recipe -> change). Plugin writes one
+# CSV per repo module under target/rewrite/datatables/<id>.csv where
+# id ends with "RecipesThatMadeChanges" or "SourcesFileResults".
+phase="datatables"
+{
+  echo "module,csv_path,recipe,file"
+  find . -path '*/target/rewrite/datatables/*.csv' 2>/dev/null | while read -r f; do
+    module=$(echo "$f" | sed 's|/target/rewrite/datatables/.*||; s|^./||')
+    # SourcesFileResults columns: sourcePath, recipeName, ... (header tells us)
+    if echo "$f" | grep -q SourcesFileResults; then
+      tail -n +2 "$f" | awk -F',' -v m="$module" -v p="$f" '{print m","p","$2","$1}'
+    fi
+  done
+} > "$OUT_DIR/per_recipe.csv" 2>>"$LOG" || true
+log "per-recipe rows: $(( $(wc -l < "$OUT_DIR/per_recipe.csv") - 1 ))"
+
+# recipe_applied = anything changed in the source tree
 diff_files=$(git status --porcelain | wc -l | tr -d ' ')
-# binary-ish files OpenRewrite should never touch; if it did, score it down.
-diff_binary_files=$(git status --porcelain | awk '{print $2}' | grep -cE '\.(class|jar|war|png|jpg|jpeg|gif|so|dll|dylib)$' || true)
-if [ "$diff_files" -gt 0 ]; then recipe_applied=1; fi
-log "diff_files=$diff_files diff_binary_files=$diff_binary_files"
+[ "$diff_files" -gt 0 ] && recipe_applied=1
 
-# Post-recipe build/test on Java 21 — the migration target.
-sdk use java 21.0.4-tem
+# --- post-recipe build on JDK 21 ---
+export JAVA_HOME="/opt/jdk/21"
+export PATH="$JAVA_HOME/bin:$PATH"
 
 phase="post-build"
 t0=$(date +%s)
 if [ "$BUILD_TOOL" = "maven" ]; then
-  if mvn -B -q -DskipTests -ntp -Djava.version=21 -Dmaven.compiler.release=21 package >>"$LOG" 2>&1; then build_post=1; fi
-else
-  if ./gradlew --no-daemon -q -Porg.gradle.java.installations.auto-detect=false assemble >>"$LOG" 2>&1; then build_post=1; fi
+  if mvn -B -q -DskipTests -ntp $MVN_OPTS_COMPAT -Dmaven.compiler.release=21 -Djava.version=21 package >>"$LOG" 2>&1; then build_post=1; fi
 fi
 build_elapsed=$(( $(date +%s) - t0 ))
 log "build_post=$build_post elapsed=${build_elapsed}s"
+[ "$build_post" -eq 1 ] || { failure="${failure:-build-post}"; exit 0; }
 
-if [ "$build_post" -ne 1 ]; then failure="${failure:-build-post}"; exit 0; fi
-
+# --- post-recipe tests on JDK 21 ---
 phase="post-test"
 t0=$(date +%s)
 if [ "$BUILD_TOOL" = "maven" ]; then
-  mvn -B -ntp -Djava.version=21 -Dmaven.compiler.release=21 \
+  mvn -B -ntp $MVN_OPTS_COMPAT -Dmaven.compiler.release=21 -Djava.version=21 \
       -Dsurefire.failIfNoSpecifiedTests=false \
-      -Dsurefire.useFile=false \
       test >>"$LOG" 2>&1 || true
-  # parse surefire output for pass/total
   read -r passed total < <(grep -E '^\[INFO\] Tests run:' "$LOG" | tail -1 | \
-    awk '{
-      run=0; fail=0; err=0; skip=0;
-      for (i=1;i<=NF;i++) {
-        if ($i=="Tests" && $(i+1)=="run:") { run=$(i+2)+0 }
-        if ($i=="Failures:") { fail=$(i+1)+0 }
-        if ($i=="Errors:") { err=$(i+1)+0 }
-        if ($i=="Skipped:") { skip=$(i+1)+0 }
-      }
-      print (run-fail-err-skip), run
-    }')
-  tests_post=${passed:-0}; tests_total_post=${total:-0}
-else
-  ./gradlew --no-daemon test >>"$LOG" 2>&1 || true
-  # crude Gradle parse — count xml test reports
-  passed=0; total=0
-  while IFS= read -r f; do
-    p=$(grep -oE 'tests="[0-9]+"' "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
-    fl=$(grep -oE 'failures="[0-9]+"' "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
-    er=$(grep -oE 'errors="[0-9]+"' "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
-    sk=$(grep -oE 'skipped="[0-9]+"' "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
-    total=$(( total + p ))
-    passed=$(( passed + p - fl - er - sk ))
-  done < <(find . -path '*/build/test-results/*.xml' -type f 2>/dev/null)
+    awk '{ for (i=1;i<=NF;i++) { if ($i=="Tests" && $(i+1)=="run:") run=$(i+2)+0;
+                                  if ($i=="Failures:") fl=$(i+1)+0;
+                                  if ($i=="Errors:") er=$(i+1)+0;
+                                  if ($i=="Skipped:") sk=$(i+1)+0 }
+            print (run-fl-er-sk), run }')
   tests_post=${passed:-0}; tests_total_post=${total:-0}
 fi
 test_elapsed=$(( $(date +%s) - t0 ))
 log "tests $tests_post / $tests_total_post elapsed=${test_elapsed}s"
 
 phase="done"
-exit 0

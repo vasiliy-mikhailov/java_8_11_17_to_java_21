@@ -46,11 +46,15 @@ def _docker_run(req: RunRequest, recipe_name: str, recipe_yml_dir: Path,
     """One container, mounted with the candidate rewrite.yml and an
     output directory. Returns the parsed metrics + a tail of the log."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Docker bind-mount paths MUST be absolute, otherwise the daemon
+    # treats them as named volume identifiers and rejects them.
+    abs_recipe_dir = Path(recipe_yml_dir).resolve()
+    abs_out_dir = Path(out_dir).resolve()
     cmd = [
         "docker", "run", "--rm",
         "--network=host",
-        "-v", f"{recipe_yml_dir}:/work/recipe:ro",
-        "-v", f"{out_dir}:/out",
+        "-v", f"{abs_recipe_dir}:/work/recipe:ro",
+        "-v", f"{abs_out_dir}:/out",
         "-e", f"REPO_URL={req.url}",
         "-e", f"REPO_SHA={req.sha}",
         "-e", f"REPO_ID={req.repo_id}",
@@ -62,11 +66,20 @@ def _docker_run(req: RunRequest, recipe_name: str, recipe_yml_dir: Path,
         image,
     ]
     log.info("starting %s", req.repo_id)
+    docker_stderr = b""
+    docker_rc = None
     try:
-        subprocess.run(cmd, check=False, timeout=timeout_s,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        r = subprocess.run(cmd, check=False, timeout=timeout_s,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        docker_stderr = r.stderr or b""
+        docker_rc = r.returncode
     except subprocess.TimeoutExpired:
         log.warning("%s timed out after %ds", req.repo_id, timeout_s)
+    if docker_rc not in (0, None):
+        # Save docker's stderr to disk so failures aren't invisible.
+        (out_dir / "docker.stderr").write_bytes(docker_stderr)
+        log.warning("%s docker rc=%s; stderr: %s", req.repo_id, docker_rc,
+                    docker_stderr.decode("utf-8", "replace")[:300].replace("\n", " | "))
 
     metrics_path = out_dir / "metrics.json"
     log_path = out_dir / "run.log"

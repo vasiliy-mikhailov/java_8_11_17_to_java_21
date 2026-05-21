@@ -23,7 +23,7 @@ cd "$HERE"
 
 # Configurable
 IMAGE="${IMAGE:-j21-fitness:latest}"
-DATASET="${DATASET:-$(realpath ../java21-migration-dataset.json)}"
+DATASET="${DATASET:-$(realpath java21-migration-dataset.json)}"
 POOL="${POOL:-recipes/pool.yml}"
 SEED="${SEED:-recipes/seed.yml}"
 RESULTS="${RESULTS:-results}"
@@ -56,6 +56,7 @@ best_dir=""
 for r in $(seq 1 "$RESTARTS"); do
   rng_seed=$((42 * r * r))
   run_dir="$RESULTS/restart-$r"
+  mkdir -p "$run_dir"
   log "ralph loop restart $r/$RESTARTS  (rng_seed=$rng_seed, results in $run_dir)"
   python3 -m orchestrator.orchestrator \
     --dataset   "$DATASET" \
@@ -67,6 +68,7 @@ for r in $(seq 1 "$RESTARTS"); do
     --proposals "$PROPOSALS" \
     --plateau-eps 0.01 \
     --plateau-window 3 \
+    --rng-seed  "$rng_seed" \
     2>&1 | tee "$run_dir/loop.log"
 
   this_score=$(jq -r '.best_score' "$run_dir/best.json")
