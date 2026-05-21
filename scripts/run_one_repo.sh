@@ -126,8 +126,32 @@ if [ "$BUILD_TOOL" = "maven" ]; then
       >>"$LOG" 2>&1
   recipe_rc=$?
 else
-  log "gradle path not supported in this rebuild; mark as no-op"
-  recipe_rc=0
+  # Gradle: inject the OpenRewrite plugin + recipe coordinates via an init
+  # script so we don't have to edit the repo's build files.
+  cat >/tmp/rewrite-init.gradle <<INIT
+initscript {
+  repositories { mavenCentral() }
+  dependencies { classpath "org.openrewrite:plugin:6.24.0" }
+}
+allprojects {
+  apply plugin: org.openrewrite.gradle.RewritePlugin
+  repositories { mavenCentral() }
+  dependencies {
+    rewrite "org.openrewrite.recipe:rewrite-migrate-java:3.12.0"
+    rewrite "org.openrewrite.recipe:rewrite-spring:6.9.0"
+    rewrite "org.openrewrite.recipe:rewrite-testing-frameworks:3.11.0"
+    rewrite "org.openrewrite.recipe:rewrite-hibernate:2.9.0"
+  }
+  rewrite {
+    activeRecipe(System.getenv("RECIPE_NAME"))
+    configFile = file(System.getenv("RECIPE_YML_PATH"))
+    exportDatatables = true
+  }
+}
+INIT
+  ./gradlew --no-daemon --init-script /tmp/rewrite-init.gradle rewriteRun \
+            >>"$LOG" 2>&1
+  recipe_rc=$?
 fi
 recipe_elapsed=$(( $(date +%s) - t0 ))
 log "recipe rc=$recipe_rc elapsed=${recipe_elapsed}s"
@@ -160,6 +184,8 @@ phase="post-build"
 t0=$(date +%s)
 if [ "$BUILD_TOOL" = "maven" ]; then
   if mvn -B -q -DskipTests -ntp $MVN_OPTS_COMPAT -Dmaven.compiler.release=21 -Djava.version=21 package >>"$LOG" 2>&1; then build_post=1; fi
+else
+  if ./gradlew --no-daemon -q -Porg.gradle.java.installations.auto-detect=false assemble >>"$LOG" 2>&1; then build_post=1; fi
 fi
 build_elapsed=$(( $(date +%s) - t0 ))
 log "build_post=$build_post elapsed=${build_elapsed}s"
@@ -172,6 +198,22 @@ if [ "$BUILD_TOOL" = "maven" ]; then
   mvn -B -ntp $MVN_OPTS_COMPAT -Dmaven.compiler.release=21 -Djava.version=21 \
       -Dsurefire.failIfNoSpecifiedTests=false \
       test >>"$LOG" 2>&1 || true
+elif [ "$BUILD_TOOL" = "gradle" ]; then
+  ./gradlew --no-daemon -Porg.gradle.java.installations.auto-detect=false test >>"$LOG" 2>&1 || true
+  # crude Gradle xml-report parse — count tests/failures/errors/skipped
+  passed=0; total=0
+  while IFS= read -r f; do
+    p=$(grep -oE 'tests="[0-9]+"'    "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
+    fl=$(grep -oE 'failures="[0-9]+"' "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
+    er=$(grep -oE 'errors="[0-9]+"'   "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
+    sk=$(grep -oE 'skipped="[0-9]+"'  "$f" | head -1 | grep -oE '[0-9]+' || echo 0)
+    total=$(( total + p ))
+    passed=$(( passed + p - fl - er - sk ))
+  done < <(find . -path '*/build/test-results/*.xml' -type f 2>/dev/null)
+  tests_post=${passed:-0}; tests_total_post=${total:-0}
+  test_elapsed=$(( $(date +%s) - t0 ))
+  log "tests $tests_post / $tests_total_post elapsed=${test_elapsed}s"
+  phase="done"; exit 0
   read -r passed total < <(grep -E '^\[INFO\] Tests run:' "$LOG" | tail -1 | \
     awk '{ for (i=1;i<=NF;i++) { if ($i=="Tests" && $(i+1)=="run:") run=$(i+2)+0;
                                   if ($i=="Failures:") fl=$(i+1)+0;
