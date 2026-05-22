@@ -98,7 +98,7 @@ cd "$PROJECT_ROOT"
 #   -Dmaven.javadoc.skip=true skips javadoc which often references removed sun.* APIs
 #   -Dskip.checkstyle=true   skips checkstyle which has its own JDK gripes
 #   -fae                     keep going on per-module failures (-fail-at-end) for multi-module repos
-MVN_OPTS_COMPAT="-fae -Denforcer.skip=true -Dlombok.version=1.18.36 -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Dspotbugs.skip=true -Dspring-javaformat.skip=true -Dformat.skip=true"
+MVN_OPTS_COMPAT="-fae -Denforcer.skip=true -Dlombok.version=1.18.36 -Dmaven.javadoc.skip=true -Dcheckstyle.skip=true -Dspotbugs.skip=true -Dspring-boot.repackage.skip=true -Ddockerfile.skip=true -Dspring-javaformat.skip=true -Dformat.skip=true"
 
 # --- pre-recipe baseline (on JDK 21) ---
 phase="baseline"
