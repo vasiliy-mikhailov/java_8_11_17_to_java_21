@@ -10,7 +10,6 @@
 - **Dataset rediscovery** (item 6): the corpus the recipe fitness measures against, ralph-looped over candidate repos.
 - **Per-failing-repo refinement** (item 7): a finer-grained ralph loop nested under the recipe fitness. Used when the coarse loop plateaus on the build-success metric.
 - **Runner saturation** (item 8): keep the verifier host loaded enough to make progress without thrashing.
-- **Sub-agent delegation** (item 10): an agent endpoint the orchestrator can hand well-scoped coding subtasks to.
 - **Dependency-resolution proxy** (item 11): a local Maven/etc cache with plural upstreams, so build outcomes reflect code, not upstream availability.
 - **Observability compactor** (item 12): route verbose tool/metric output through a summariser so the orchestrator scans digests, not dumps; raw source kept on disk.
 
@@ -37,11 +36,6 @@
    - **Reward:** sustained band hit without thrashing or stalling the parent loop.
    - **Repeat:** continuous, dampened against oscillation; pause when no parent loop is active.
 
-10. **Fitness (sub-agent delegation):** stand up an OpenHands (or equivalent) agent endpoint on the work host that the orchestrating agent can hand well-scoped subtasks to, so the orchestrator writes less glue code itself.
-    - **Constraints:** sub-agent runs in Docker on the work host, can read/write the project workdir, returns structured results; the sandbox may not reach host-owned docker images or sockets — scope dispatched tasks to ones that don't depend on them; the endpoint rejects unauthenticated requests, is reachable by curl from outside the host, and a fresh conversation seeded with the literal message 'hi' returns a non-empty agent response within the orchestrator's wait budget.
-    - **Search:** ralph loop over container config, model backend wiring, auth.
-    - **Reward:** dispatch a representative subtask, get a usable artifact back without writing the script.
-    - **Repeat:** every time the orchestrator catches itself writing throwaway scripting glue.
 
 11. **Fitness (dependency-resolution proxy):** make every build's external-artifact resolution go through a local caching proxy with plural upstream mirrors, so build outcomes reflect code state rather than upstream availability.
     - **Constraints:** the proxy caches every artifact it serves and survives across iterations; upstreams include both live mirrors and archival ones so a disappearance from one is masked by another; container builds reach the proxy by container-network DNS, not host IPs.
