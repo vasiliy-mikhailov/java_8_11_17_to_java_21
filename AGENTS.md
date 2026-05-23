@@ -50,7 +50,7 @@
     - **Repeat:** whenever a parent loop's failures cluster on artifact resolution.
 
 12. **Fitness (observability compactor):** route verbose tool output and system-metric flows through a compacting model so the orchestrator scans one-line digests instead of raw dumps.
-    - **Constraints:** the compactor's output may mislabel or omit, so its reliability is treated as bounded — never load-bearing for irreversible decisions without a spot check; the raw uncompacted source persists on disk, keyed so the orchestrator can retrieve the original whenever the compact form is insufficient.
+    - **Constraints:** the compactor's reliability is treated as bounded — it may mislabel, and its judgement of what is unimportant is itself fallible so important context can be silently dropped; the raw uncompacted source persists on disk, keyed so the orchestrator can retrieve the original whenever the digest is insufficient or suspect, and the compactor is never load-bearing for irreversible decisions without a spot check against that source.
     - **Search:** when a stream of output becomes routine and exceeds what the orchestrator wants to read line-by-line, route it through the compactor; periodically spot-sample raw vs digest to recalibrate trust.
     - **Reward:** the orchestrator covers an order of magnitude more output per unit of its own context, while spot-sample agreement with the raw source stays above the threshold it set for the stream.
     - **Repeat:** whenever a new noisy stream enters the loop.
