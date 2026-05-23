@@ -1,12 +1,9 @@
 # AGENTS.md
 
-**Writing to the agent:** Prefer compact fitness functions and constraints over implementation instructions; the agent is capable of filling the gaps itself because it has tool access, internet search, sandboxed execution, verification, and iterative repair capabilities.
-
-**Editing this file — read → why → intent:** when revisiting a clause, ask "why is this here?" If the answer is *implementation detail*, *enumeration*, or *justification for the rule*, strip it back to the underlying intent — the rule itself, named at the outcome level. The agent re-derives the *how* every iteration from its tools and the corpus; a frozen *how* in the spec just ages badly.
-
 **Per-attempt history:** each `attempt_N/README.md` is a historical snapshot of the AGENTS.md state under which that attempt ran. It is not read by the agent — it exists only for audit.
 
 **Fitness structure:**
+- **Writing this file** (item 0): the meta-fitness governing AGENTS.md itself.
 - Operational (items 1–3): workdir, containment, access — preconditions every iteration must respect.
 - **Recipe** (item 4): the primary fitness — find the OpenRewrite recipe composition that produces the highest-quality Java 21 conversion of the dataset. May be single-jump or staged across intermediate JDKs.
 - **vLLM spin-up** (item 5): the inference endpoint observables, ralph-looped over container / proxy config until satisfied.
@@ -14,6 +11,11 @@
 - **Per-failing-repo refinement** (item 7): a finer-grained ralph loop nested under the recipe fitness. Used when the coarse loop plateaus on the build-success metric.
 - **Runner saturation** (item 8): keep the verifier host loaded enough to make progress without thrashing.
 
+0. **Fitness (writing this file):** keep AGENTS.md compact and outcome-named so the agent re-derives the *how* every iteration from its tools and the corpus.
+   - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule.
+   - **Search:** read → why → intent — when revisiting a clause, ask "why is this here?"; if the answer is implementation detail, enumeration, or justification, strip it back to the rule itself.
+   - **Reward:** cuts that lose words without losing the rule.
+   - **Repeat:** every editing pass.
 1. **Workdir:** `$HOME/java_8_11_17_to_java_21`.
 2. **Containment:** all build toolchains and recipe execution run inside Docker. If a host resource this project needs is held by something unrelated, free it in favour of this project. Cache external downloads on a host-side bind mount shared across containers, and let the cache survive across iterations.
 3. **Access:** SSH calls to the work host share one session, not one per command.
