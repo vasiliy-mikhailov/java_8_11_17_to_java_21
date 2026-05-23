@@ -87,7 +87,7 @@ def build_one(c):
             cmd = (f'if [ -f pom.xml ]; then mvn {mvn_flags} compile; '
                    f'else (./gradlew --no-daemon -x test compileJava 2>/dev/null || gradle --no-daemon -x test compileJava); fi')
             home = os.environ['HOME']
-            docker_cmd = ['docker','run','--rm','--entrypoint','/bin/bash',
+            docker_cmd = ['docker','run','--rm','--cpus','2.5','--memory','6g','--entrypoint','/bin/bash',
                           '-v', f'{root}:/work',
                           '-v', f'{home}/.m2-fitness:/root/.m2',
                           '-e', f'JAVA_HOME={jdk_path}',
@@ -112,7 +112,7 @@ def build_one(c):
 
 if __name__ == '__main__':
     final = []
-    sem = threading.BoundedSemaphore(4)
+    sem = threading.BoundedSemaphore(8)
 
     def cell_worker(cell, candidates):
         chosen = []
