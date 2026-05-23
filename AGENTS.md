@@ -11,6 +11,7 @@
 - **Per-failing-repo refinement** (item 7): a finer-grained ralph loop nested under the recipe fitness. Used when the coarse loop plateaus on the build-success metric.
 - **Runner saturation** (item 8): keep the verifier host loaded enough to make progress without thrashing.
 - **Sub-agent delegation** (item 10): an agent endpoint the orchestrator can hand well-scoped coding subtasks to.
+- **Dependency-resolution proxy** (item 11): a local Maven/etc cache with plural upstreams, so build outcomes reflect code, not upstream availability.
 
 0. **Fitness (writing this file):** keep AGENTS.md compact and outcome-named so the agent re-derives the *how* every iteration from its tools and the corpus.
    - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule.
@@ -40,3 +41,9 @@
     - **Search:** ralph loop over container config, model backend wiring, auth.
     - **Reward:** dispatch a representative subtask, get a usable artifact back without writing the script.
     - **Repeat:** every time the orchestrator catches itself writing throwaway scripting glue.
+
+11. **Fitness (dependency-resolution proxy):** make every build's external-artifact resolution go through a local caching proxy with plural upstream mirrors, so build outcomes reflect code state rather than upstream availability.
+    - **Constraints:** the proxy caches every artifact it serves and survives across iterations; upstreams include both live mirrors and archival ones so a disappearance from one is masked by another; container builds reach the proxy by container-network DNS, not host IPs.
+    - **Search:** when a build fails on "cannot resolve X", widen the upstream set first; only after widening exhausts itself is the failure attributable to the code.
+    - **Reward:** per-artifact cache-hit ratio; resolution failures distinguishable from compile failures in the parent loop's classification.
+    - **Repeat:** whenever a parent loop's failures cluster on artifact resolution.
