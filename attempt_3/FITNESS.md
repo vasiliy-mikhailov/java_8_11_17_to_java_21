@@ -1,8 +1,10 @@
+# Fitness spec as of attempt_3 wrap
+
+Snapshot of AGENTS.md at HEAD just before attempt_4 (staged migration) was started.
+
 # AGENTS.md
 
 **Writing to the agent:** Prefer compact fitness functions and constraints over implementation instructions; the agent is capable of filling the gaps itself because it has tool access, internet search, sandboxed execution, verification, and iterative repair capabilities.
-
-**Per-attempt fitness:** each `attempt_N/FITNESS.md` snapshots the AGENTS.md state under which that attempt ran, plus any attempt-specific addendum (e.g. `attempt_4/FITNESS.md` adds item 9: staged migration).
 
 **Fitness structure:**
 - Operational (items 1–3): workdir, containment, access — preconditions every iteration must respect.
