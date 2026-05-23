@@ -87,7 +87,8 @@ def build_one(c):
             cmd = (f'if [ -f pom.xml ]; then mvn {mvn_flags} compile; '
                    f'else (./gradlew --no-daemon -x test compileJava 2>/dev/null || gradle --no-daemon -x test compileJava); fi')
             home = os.environ['HOME']
-            docker_cmd = ['docker','run','--rm','--cpus','2.5','--memory','6g','--entrypoint','/bin/bash',
+            container_name = f'verify-{os.getpid()}-{threading.get_ident()}-{int(time.time())}'
+            docker_cmd = ['docker','run','--rm','--name',container_name,'--cpus','2.5','--memory','6g','--entrypoint','/bin/bash',
                           '-v', f'{root}:/work',
                           '-v', f'{home}/.m2-fitness:/root/.m2',
                           '-e', f'JAVA_HOME={jdk_path}',
@@ -99,6 +100,11 @@ def build_one(c):
                 rc = p.returncode
             except subprocess.TimeoutExpired:
                 rc = 124
+                # subprocess timed out but docker child keeps running - kill the leaked container
+                try:
+                    subprocess.run(['docker','kill',container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+                except Exception:
+                    pass
             build_elapsed = int(time.time() - t1); clone_elapsed = int(t1 - t0)
             metrics = {'repo': fn, 'commit_sha': actual_sha, 'java_version': jv,
                        'dep_family': c['family'], 'build_tool': build_tool,
@@ -112,7 +118,7 @@ def build_one(c):
 
 if __name__ == '__main__':
     final = []
-    sem = threading.BoundedSemaphore(8)
+    sem = threading.BoundedSemaphore(16)
 
     def cell_worker(cell, candidates):
         chosen = []
@@ -124,7 +130,7 @@ if __name__ == '__main__':
                 chosen.append(info)
         return cell, chosen
 
-    with ThreadPoolExecutor(max_workers=12) as ex:
+    with ThreadPoolExecutor(max_workers=20) as ex:
         futs = {ex.submit(cell_worker, cell, cands[:80]): cell for cell, cands in pool.items()}
         for f in as_completed(futs):
             cell, chosen = f.result()
