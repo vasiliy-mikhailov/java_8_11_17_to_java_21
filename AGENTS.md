@@ -38,7 +38,7 @@
    - **Repeat:** continuous, dampened against oscillation; pause when no parent loop is active.
 
 10. **Fitness (sub-agent delegation):** stand up an OpenHands (or equivalent) agent endpoint on the work host that the orchestrating agent can hand well-scoped subtasks to, so the orchestrator writes less glue code itself.
-    - **Constraints:** sub-agent runs in Docker on the work host, can read/write the project workdir, returns structured results. The sub-agent's sandbox may not reach host-owned docker images or sockets — scope dispatched tasks to ones that don't depend on them.
+    - **Constraints:** sub-agent runs in Docker on the work host, can read/write the project workdir, returns structured results; the sandbox may not reach host-owned docker images or sockets — scope dispatched tasks to ones that don't depend on them; the endpoint rejects unauthenticated requests, is reachable by curl from outside the host, and a fresh conversation seeded with the literal message 'hi' returns a non-empty agent response within the orchestrator's wait budget.
     - **Search:** ralph loop over container config, model backend wiring, auth.
     - **Reward:** dispatch a representative subtask, get a usable artifact back without writing the script.
     - **Repeat:** every time the orchestrator catches itself writing throwaway scripting glue.
