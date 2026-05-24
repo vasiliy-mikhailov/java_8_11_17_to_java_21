@@ -2,20 +2,10 @@
 
 **Per-attempt history:** each `attempt_N/README.md` is a historical snapshot of the AGENTS.md state under which that attempt ran. It is not read by the agent — it exists only for audit.
 
-**Fitness structure:**
-- **Writing this file** (item 0): the meta-fitness governing AGENTS.md itself.
-- Operational (items 1–3): workdir, containment, access — preconditions every iteration must respect.
-- **Recipe** (item 4): the primary fitness — find the OpenRewrite recipe composition that produces the highest-quality Java 21 conversion of the dataset. May be single-jump or staged across intermediate JDKs.
-- **vLLM spin-up** (item 5): the inference endpoint observables, ralph-looped over container / proxy config until satisfied.
-- **Dataset rediscovery** (item 6): the corpus the recipe fitness measures against, ralph-looped over candidate repos.
-- **Per-failing-repo refinement** (item 7): a finer-grained ralph loop nested under the recipe fitness. Used when the coarse loop plateaus on the build-success metric.
-- **Runner saturation** (item 8): keep the verifier host loaded enough to make progress without thrashing.
-- **Dependency-resolution proxy** (item 11): a local Maven/etc cache with plural upstreams, so build outcomes reflect code, not upstream availability.
-- **Observability compactor** (item 12): route verbose tool/metric output through a summariser so the orchestrator scans digests, not dumps; raw source kept on disk.
-- **Intent coverage** (item 13): measure recipe-vs-human at the intent level, bucketed as breaking vs polishment; drives item 4's reward.
+**Fitness index:** 0 writing-this-file • 1-3 operational • 4 recipe • 5 vLLM • 6 dataset • 7 per-failing-repo refinement • 8 runner saturation • 11 dependency-resolution proxy • 12 observability compactor • 13 intent coverage.
 
 0. **Fitness (writing this file):** keep AGENTS.md compact and outcome-named so the agent re-derives the *how* every iteration from its tools and the corpus.
-   - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule; if a fitness produces output other fitnesses depend on, the obligation lives here as a contract clause.
+   - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule, no stale cross-references, no model or version names that drift, no content duplicated between summary header and fitness body; if a fitness produces output other fitnesses depend on, the obligation lives here as a contract clause.
    - **Search:** read → why → intent — when revisiting a clause, ask "why is this here?"; if the answer is implementation detail, enumeration, or justification, strip it back to the rule itself.
    - **Reward:** cuts that lose words without losing the rule.
    - **Repeat:** every editing pass.
@@ -38,12 +28,12 @@
     - **Reward:** coverage in under-represented cells; fraction of entries where every commit is baseline-buildable.
     - **Repeat:** continuous; paused when downstream items are saturated on the current corpus.
 
-7. **Fitness (per-failing-repo refinement):** raise the corpus build-success rate past where coarse recipe mutations plateau, leveraging vLLM Qwen 3.6 27B FP8 and Claude as solution-finder + judges throughout.
+7. **Fitness (per-failing-repo refinement):** raise the corpus build-success rate past where coarse recipe mutations plateau, leveraging the vLLM endpoint (item 5) and Claude as solution-finder + judges throughout.
    - **Constraints:** declarative configuration deltas only; contract with item 4 — wins (build_post 0→1 flips on the corpus) fold into item 4's corpus build-success aggregate.
    - **Search:** ground each candidate fix in a known community workaround.
    - **Reward:** real `build_post 0 → 1` flips net of regressions on the full corpus.
    - **Repeat:** simplest cluster first; stop when only bespoke engineering remains.
-8. **Fitness (runner saturation):** keep the verifier host CPU between 60 % and 80 % of cores *while any parent loop is making progress* — this fitness composes with the parent rather than standing alone — saturation only counts toward the composite objective when the parent loop is making progress.
+8. **Fitness (runner saturation):** keep the verifier host CPU in a healthy utilisation band *while any parent loop is making progress* — this fitness composes with the parent rather than standing alone — saturation only counts toward the composite objective when the parent loop is making progress.
    - **Constraints:** any concurrency dial the agent can reach.
    - **Search:** sample load periodically, decide what to adjust given the recent action history and which parent loop is active.
    - **Reward:** sustained band hit without thrashing or stalling the parent loop.
