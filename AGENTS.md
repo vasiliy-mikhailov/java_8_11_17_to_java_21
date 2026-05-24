@@ -43,7 +43,7 @@
 
 
 11. **Fitness (dependency-resolution proxy):** make every build's external-artifact resolution go through a local caching proxy with plural upstream mirrors, so build outcomes reflect code state rather than upstream availability.
-    - **Constraints:** the proxy caches every artifact it serves and survives across iterations; upstreams include both live mirrors and archival ones so a disappearance from one is masked by another; container builds reach the proxy by container-network DNS, not host IPs.
+    - **Constraints:** the proxy caches every artifact it serves and survives across iterations; upstreams include both live mirrors and archival ones so a disappearance from one is masked by another; container builds reach the proxy by container-network DNS, not host IPs; contract with item 4 — build failures in item 4's loop are attributable to code state, not upstream availability, so an unresolved artifact in item 4 triggers an item 11 widening before that build is counted toward item 4's reward.
     - **Search:** when a build fails on "cannot resolve X", widen the upstream set first; only after widening exhausts itself is the failure attributable to the code.
     - **Reward:** per-artifact cache-hit ratio; resolution failures distinguishable from compile failures in the parent loop's classification.
     - **Repeat:** whenever a parent loop's failures cluster on artifact resolution.
