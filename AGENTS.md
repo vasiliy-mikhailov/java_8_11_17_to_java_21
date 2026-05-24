@@ -1,9 +1,5 @@
 # AGENTS.md
 
-**Per-attempt history:** each `attempt_N/README.md` is a historical snapshot of the AGENTS.md state under which that attempt ran. It is not read by the agent — it exists only for audit.
-
-**Fitness index:** 0 writing-this-file • 1-3 operational • 4 recipe • 5 vLLM • 6 dataset • 7 per-failing-repo refinement • 8 runner saturation • 11 dependency-resolution proxy • 12 observability compactor • 13 intent coverage.
-
 0. **Fitness (writing this file):** keep AGENTS.md compact and outcome-named so the agent re-derives the *how* every iteration from its tools and the corpus.
    - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule; if a fitness produces output other fitnesses depend on, the obligation lives here as a contract clause.
    - **Search:** read → why → intent — when revisiting a clause, ask "why is this here?"; if the answer is implementation detail, enumeration, or justification, strip it back to the rule itself.
