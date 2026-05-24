@@ -1,0 +1,239 @@
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+index bab21a0..cdc5172 100644
+--- a/.gitlab-ci.yml
++++ b/.gitlab-ci.yml
+@@ -1,4 +1,230 @@
+-include:
+-  - project: ${PULSALYS_BUS_CI_PROJECT}
+-    file: '/app-ci.yml'
+-    ref: RELEASE_1.5.0
++image: maven:3.9.7-eclipse-temurin-21
++
++variables:
++  MAVEN_CLI_OPTS: "-Dmaven.repo.local=.m2/repository -U --batch-mode --settings maven-settings.xml"
++
++cache:
++  paths:
++    - ".m2/repository/"
++    - target/
++
++stages:
++  - ".pre"
++  - release
++  - init
++  - test
++  - build
++  - push
++  - deploy
++
++# ============================================================
++# Stage: Release - Gestion des versions pour les releases
++# ============================================================
++
++check-snapshots:
++  stage: release
++  script:
++    - mvn ${MAVEN_CLI_OPTS} enforcer:enforce
++  rules:
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++
++set-version:
++  stage: release
++  needs:
++    - job: check-snapshots
++      optional: false
++  script:
++    - export RELEASE_VERSION=$(echo ${CI_COMMIT_REF_NAME} | sed 's/^RELEASE_//')
++    - mvn ${MAVEN_CLI_OPTS} versions:set -DnewVersion=${RELEASE_VERSION}
++  rules:
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++  artifacts:
++    paths:
++      - "**/pom.xml"
++    expire_in: 1 day
++
++# ============================================================
++# Stage: Init - Extraction des propriétés
++# ============================================================
++
++extract-props:
++  stage: init
++  needs:
++    - job: set-version
++      optional: true
++  cache:
++    key: maven-extract-props-$CI_COMMIT_REF_SLUG
++    paths:
++      - .m2/repository/
++  script:
++    - echo "=== 🔍 DIAGNOSTIC RÉSEAU ==="
++    - echo "📡 Variables proxy:"
++    - env | grep -i proxy || echo "Aucune variable proxy détectée"
++    - echo ""
++    - echo "🌐 Test DNS pour repo.maven.apache.org:"
++    - nslookup repo.maven.apache.org || echo "❌ DNS échoué"
++    - echo ""
++    - echo "🔗 Test de connectivité HTTP:"
++    - curl -v --max-time 10 --connect-timeout 5 https://repo.maven.apache.org/maven2/ 2>&1 | head -20 || echo "❌ Curl échoué"
++    - echo ""
++    - echo "📡 Configuration réseau du conteneur:"
++    - ip addr show || ifconfig || echo "Commandes réseau non disponibles"
++    - echo ""
++    - echo "📋 Résolveurs DNS:"
++    - cat /etc/resolv.conf || echo "Fichier DNS non accessible"
++    - echo ""
++    - echo "=== 🔍 Extraction des propriétés Maven ==="
++    - echo "📦 Téléchargement des dépendances en cours..."
++    - mvn ${MAVEN_CLI_OPTS} dependency:resolve || true
++    - echo "✅ Dépendances téléchargées"
++    - echo "📦 Extraction GROUP_ID..."
++    - export GROUP_ID=$(mvn ${MAVEN_CLI_OPTS} help:evaluate -Dexpression=project.groupId -q -DforceStdout)
++    - echo "✅ GROUP_ID=${GROUP_ID}"
++    - echo "📦 Extraction ARTIFACT_ID..."
++    - export ARTIFACT_ID=$(mvn ${MAVEN_CLI_OPTS} help:evaluate -Dexpression=project.artifactId -q -DforceStdout)
++    - echo "✅ ARTIFACT_ID=${ARTIFACT_ID}"
++    - echo "📦 Extraction VERSION..."
++    - export VERSION=$(mvn ${MAVEN_CLI_OPTS} help:evaluate -Dexpression=project.version -q -DforceStdout)
++    - echo "✅ VERSION=${VERSION}"
++    - echo "GROUP_ID=${GROUP_ID}" > props.env
++    - echo "ARTIFACT_ID=${ARTIFACT_ID}" >> props.env
++    - echo "VERSION=${VERSION}" >> props.env
++    - echo "CI_REGISTRY_IMAGE=${CI_REGISTRY_IMAGE}" >> props.env
++    - echo "COMPOSE_PROJECT_NAME=$(echo ${GROUP_ID} | sed 's/\./_/g')-$(echo ${ARTIFACT_ID} | sed 's/\./_/g')" >> props.env
++    - echo "✅ Extraction terminée"
++  rules:
++    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
++    - if: $CI_COMMIT_BRANCH == "develop"
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++  artifacts:
++    paths:
++      - props.env
++    expire_in: 1 day
++
++# ============================================================
++# Stage: Test - Exécution des tests
++# ============================================================
++
++test-java:
++  stage: test
++  needs:
++    - job: extract-props
++      optional: false
++  cache:
++    key: maven-test-$CI_COMMIT_REF_SLUG
++    paths:
++      - .m2/repository/
++  script:
++    - mvn ${MAVEN_CLI_OPTS} test
++  rules:
++    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
++    - if: $CI_COMMIT_BRANCH == "develop"
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++  artifacts:
++    reports:
++      junit:
++        - target/surefire-reports/TEST-*.xml
++    expire_in: 7 days
++
++sonarqube:
++  stage: test
++  needs:
++    - job: set-version
++      optional: true
++    - job: extract-props
++      optional: false
++  variables:
++    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
++    GIT_DEPTH: "0"
++  cache:
++    key: sonar-cache-$CI_COMMIT_REF_SLUG
++    paths:
++      - .sonar/cache
++      - .m2/repository
++  script:
++    - mvn ${MAVEN_CLI_OPTS} verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
++  allow_failure: true
++  rules:
++    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
++    - if: $CI_COMMIT_BRANCH == "develop"
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++
++# ============================================================
++# Stage: Build - Compilation et build
++# ============================================================
++
++build-java:
++  stage: build
++  needs:
++    - job: test-java
++      optional: false
++    - job: extract-props
++      optional: false
++  cache:
++    key: maven-build-$CI_COMMIT_REF_SLUG
++    paths:
++      - .m2/repository/
++  script:
++    - mvn ${MAVEN_CLI_OPTS} clean package -DskipTests
++  rules:
++    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
++    - if: $CI_COMMIT_BRANCH == "develop"
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++  artifacts:
++    paths:
++      - target/*.jar
++    expire_in: 1 day
++
++build-stacks:
++  stage: build
++  image: docker:27.5.1-cli
++  needs:
++    - job: extract-props
++      optional: false
++  script:
++    - source props.env
++    - mkdir -p target
++    - cd src/main/docker
++    - |
++      for ENV in int rec prd; do
++        # Utiliser les variables d'environnement depuis props.env
++        docker compose \
++          --env-file ../../../props.env \
++          -f docker-compose.yml \
++          -f docker-compose.${ENV}.yml \
++          config > ../../../target/docker-compose-${ENV}.yml || true
++      done
++    - cd ../../..
++  rules:
++    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
++    - if: $CI_COMMIT_BRANCH == "develop"
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/
++  artifacts:
++    paths:
++      - target/docker-compose-*.yml
++    expire_in: 90 days
++
++# ============================================================
++# Stage: Push - Publication des artefacts
++# ============================================================
++
++push-stacks:
++  stage: push
++  needs:
++    - job: build-stacks
++      optional: false
++    - job: extract-props
++      optional: false
++  script:
++    - source props.env
++    - cd target
++    - jar cf stack.jar docker-compose-*.yml
++    - cd ..
++  artifacts:
++    paths:
++      - target/stack.jar
++    expire_in: 90 days
++  rules:
++    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
++    - if: $CI_COMMIT_BRANCH == "develop"
++    - if: $CI_COMMIT_TAG =~ /^RELEASE_.*/

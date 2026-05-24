@@ -1,0 +1,115 @@
+diff --git a/src/main/java/com/upao/recicla/domain/service/CanjeService.java b/src/main/java/com/upao/recicla/domain/service/CanjeService.java
+index 4b7a993..5a68bfe 100644
+--- a/src/main/java/com/upao/recicla/domain/service/CanjeService.java
++++ b/src/main/java/com/upao/recicla/domain/service/CanjeService.java
+@@ -1,5 +1,7 @@
+ package com.upao.recicla.domain.service;
+ 
++import com.upao.recicla.blockchain.dto.TransactionResult;
++import com.upao.recicla.blockchain.service.BlockchainService;
+ import com.upao.recicla.domain.entity.Canje;
+ import com.upao.recicla.domain.entity.Recompensa;
+ import com.upao.recicla.domain.entity.Usuario;
+@@ -9,13 +11,16 @@ import com.upao.recicla.infra.repository.CanjeRepository;
+ import com.upao.recicla.infra.repository.RecompensaRepository;
+ import com.upao.recicla.infra.repository.UsuarioRepository;
+ import jakarta.transaction.Transactional;
++import lombok.extern.slf4j.Slf4j;
+ import org.springframework.beans.factory.annotation.Autowired;
+ import org.springframework.security.core.context.SecurityContextHolder;
+ import org.springframework.stereotype.Service;
+ 
++import java.math.BigDecimal;
+ import java.time.LocalDate;
+ 
+ @Service
++@Slf4j
+ public class CanjeService {
+ 
+     @Autowired
+@@ -30,7 +35,11 @@ public class CanjeService {
+     @Autowired
+     private EmailService emailService;
+ 
+-    public CanjeService(CanjeRepository canjeRepository, UsuarioRepository usuarioRepository,
++    @Autowired(required = false)
++    private BlockchainService blockchainService;
++
++    public CanjeService(CanjeRepository canjeRepository,
++                        UsuarioRepository usuarioRepository,
+                         RecompensaRepository recompensaRepository) {
+         this.canjeRepository = canjeRepository;
+         this.usuarioRepository = usuarioRepository;
+@@ -41,28 +50,68 @@ public class CanjeService {
+     public void canjearPuntos(String nombreRecompensa) {
+         try {
+             String nombreUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
+-            Usuario usuario = usuarioRepository.findByUsername(nombreUsuario).orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+-            Recompensa recompensa = recompensaRepository.findByTitulo(nombreRecompensa).orElseThrow(() -> new RuntimeException("Recompensa no encontrada"));
++            Usuario usuario = usuarioRepository.findByUsername(nombreUsuario)
++                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
++
++            Recompensa recompensa = recompensaRepository.findByTitulo(nombreRecompensa)
++                    .orElseThrow(() -> new RuntimeException("Recompensa no encontrada"));
+ 
+             if (usuario.getPuntos() < recompensa.getValor()) {
+                 throw new PuntosInsuficientesException("No tienes suficientes puntos para canjear esta recompensa");
+             }
+ 
++            // quemar tokens en blockchain
++            String txHash = null;
++            if (blockchainService != null && usuario.getWalletAddress() != null) {
++                try {
++                    log.info("Quemando {} tokens en blockchain para {}",
++                            recompensa.getValor(), usuario.getUsername());
++
++                    String description = String.format("Canje: %s - %s",
++                            recompensa.getTitulo(),
++                            recompensa.getDescripcion()
++                    );
++
++                    TransactionResult result = blockchainService.burnTokensForRedemption(
++                            usuario.getWalletAddress(),
++                            BigDecimal.valueOf(recompensa.getValor()),
++                            description
++                    );
++
++                    if (result.isSuccess()) {
++                        txHash = result.getTransactionHash();
++                        log.info("Tokens quemados en blockchain. TX: {}", txHash);
++                    } else {
++                        log.warn("No se pudieron quemar tokens en blockchain: {}", result.getErrorMessage());
++                    }
++                } catch (Exception e) {
++                    log.error("Error quemando tokens en blockchain", e);
++                    // Continúa aunque falle blockchain
++                }
++            } else {
++                log.info("Blockchain deshabilitado o usuario sin wallet");
++            }
++
++            // Actualizar puntos en DB
+             usuario.setPuntos(usuario.getPuntos() - recompensa.getValor());
+             usuario.actualizarNivel();
+             usuarioRepository.save(usuario);
+ 
++            // Crear registro de canje
+             Canje canje = new Canje();
+             canje.setFecha(LocalDate.now());
+             canje.setPuntosCanjear(recompensa.getValor());
++            canje.setBlockchainTxHash(txHash);  // ← NUEVO
+             canje.setUsuario(usuario);
+             canje.setRecompensa(recompensa);
+ 
+             canjeRepository.save(canje);
+ 
++            // Enviar email
+             emailService.enviarCorreoConPDF(usuario.getCorreo(), canje);
++
+         } catch (Exception e) {
+             throw new RuntimeException(e.getMessage());
+         }
+     }
+-}
++}
+\ No newline at end of file
