@@ -15,7 +15,7 @@
 - **Intent coverage** (item 13): measure recipe-vs-human at the intent level, bucketed as breaking vs polishment; drives item 4's reward.
 
 0. **Fitness (writing this file):** keep AGENTS.md compact and outcome-named so the agent re-derives the *how* every iteration from its tools and the corpus.
-   - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule.
+   - **Constraints:** no implementation instructions the agent can fill itself, no enumerations that age, no justifications for the rule alongside the rule; if a fitness produces output other fitnesses depend on, the obligation lives here as a contract clause.
    - **Search:** read → why → intent — when revisiting a clause, ask "why is this here?"; if the answer is implementation detail, enumeration, or justification, strip it back to the rule itself.
    - **Reward:** cuts that lose words without losing the rule.
    - **Repeat:** every editing pass.
@@ -23,7 +23,7 @@
 2. **Containment:** all build toolchains and recipe execution run inside Docker. If a host resource this project needs is held by something unrelated, free it in favour of this project. External-artifact caching is governed by item 11.
 3. **Access:** SSH calls to the work host share one session, not one per command.
 4. **Fitness (recipe):** find an OpenRewrite recipe composition that converges each repo in `java21-migration-dataset.json` to the form humans committed.
-    - **Constraints:** declarative YAML only; each adjacent step in a lineage is its own stage; each stage runs under the JDK matching its output level, accepts exactly one input level, and its source+pom edits persist into the next stage's working tree.
+    - **Constraints:** declarative YAML only; each adjacent step in a lineage is its own stage; each stage runs under the JDK matching its output level, accepts exactly one input level, and its source+pom edits persist into the next stage's working tree; emits per (repo, stage) cells with build outcome and recipe-output, consumed by item 7 (failing cells as its input set) and item 13 (recipe-output for intent extraction).
     - **Search:** per stage, draw from the recipe catalog, community migration guidance, and the diff between the candidate's output and the human's commit at that stage's output level.
     - **Reward:** per stage, fraction of the corpus that builds on the stage's JDK, jointly with intent overlap with the human's commit at that level (item 13), with regressions weighted heavier than non-improvements.
     - **Repeat:** ralph loop per stage; on plateau, drop into item 7.
