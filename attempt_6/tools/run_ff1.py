@@ -182,7 +182,7 @@ def main():
         vl = sorted(e["verified_lineage"], key=lambda s: s["java_version"])
         for i in range(len(vl) - 1):
             jf, jt = vl[i]["java_version"], vl[i + 1]["java_version"]
-            if not adjacent(jf, jt): continue
+            # adjacent-only restriction lifted; UpgradeToJava<jv_to> handles multi-step transitively
             stages.append({
                 "repo": e["repo_full_name"],
                 "sha_from": vl[i]["commit_sha"],
@@ -221,7 +221,7 @@ def main():
     # Preserve old results, append new ones
     results_existing = [x for x in existing if (x["repo"], x["sha_from"]) in done_keys]
 
-    print(f"total adjacent stages: {len(stages)}", flush=True)
+    print(f"total stages: {len(stages)}", flush=True)
 
     results = list(results_existing)
     lock = threading.Lock()
