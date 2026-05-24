@@ -52,6 +52,19 @@ case "$PHASE" in
     fi
     exit $?
     ;;
+  test_pre|test_post)
+    # mvn test under JDK = STAGE_JDK. -DskipTests stripped via override to false. Other -D*.skip kept.
+    # test_pre runs against UNMODIFIED source under jv_from; test_post runs against post-recipe source under jv_to.
+    extra="-DskipTests=false"
+    [ "$PHASE" = "test_post" ] && extra="-Dmaven.compiler.release=${STAGE_JDK} -Djava.version=${STAGE_JDK} -DskipTests=false"
+    if [ "$BUILD_TOOL" = "maven" ]; then
+      mvn $MVN_FLAGS $extra -q test >> "$STAGE_LOG" 2>&1
+    else
+      ./gradlew --no-daemon -q test >> "$STAGE_LOG" 2>&1 || \
+        gradle --no-daemon -q test >> "$STAGE_LOG" 2>&1
+    fi
+    exit $?
+    ;;
   recipe)
     : "${STAGE_RECIPE:?}"
     PLUGIN=org.openrewrite.maven:rewrite-maven-plugin:6.12.0

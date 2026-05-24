@@ -159,6 +159,13 @@ def process_stage(stage, idx, total):
         rc = run_phase(work_dir, recipes_dir, log, "build_pre", jf, build_tool)
         result["build_pre"] = (rc == 0)
 
+        # 1b) test_pre under SOURCE JDK (jv_from), only if build_pre passed
+        if result.get("build_pre"):
+            rc_t = run_phase(work_dir, recipes_dir, log, "test_pre", jf, build_tool)
+            result["tests_pre"] = (rc_t == 0)
+        else:
+            result["tests_pre"] = None
+
         # 2) recipe under TARGET JDK (jv_to)
         recipe_path = os.path.join(recipes_dir, "stage.yml")
         write_recipe_yml(recipe_path, jt)
@@ -170,7 +177,14 @@ def process_stage(stage, idx, total):
         rc = run_phase(work_dir, recipes_dir, log, "build_post", jt, build_tool)
         result["build_post"] = (rc == 0)
 
-        # 4) capture recipe diff per modified file, run canonical intent extractor,
+        # 4) test_post under TARGET JDK if build_post passed
+        if result.get("build_post"):
+            rc_t = run_phase(work_dir, recipes_dir, log, "test_post", jt, build_tool)
+            result["tests_post"] = (rc_t == 0)
+        else:
+            result["tests_post"] = None
+
+        # 5) capture recipe diff per modified file, run canonical intent extractor,
         #    emit recipe_samples/<slug>/ in item 3 schema.
         if result.get("recipe_applied"):
             try:
