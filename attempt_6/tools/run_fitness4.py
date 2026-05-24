@@ -18,11 +18,14 @@ For each distinct INTENT (the purpose of a change, not its surface text), emit o
   "general_idea": "<one sentence describing the migration purpose>",
   "before":       "<brief snippet of the older form (\"-\" side) or \"\" if pure addition>",
   "after":        "<brief snippet of the newer form (\"+\" side) or \"\" if pure removal>",
-  "bucket":       "breaking | polishment"
+  "bucket":       "breaking | polishment",
+  "why_exists":   "<for breaking only: what compile/runtime failure occurs without this change; \"\" for polishment>"
 }
 
 Both before and after are REQUIRED — the recipe author needs to match against the before form
 and emit the after form. For an addition: before="". For a removal: after="".
+why_exists is REQUIRED for breaking intents — name the concrete failure (compile error, runtime
+exception, removed API, JDK incompatibility). For polishment intents leave why_exists="".
 
 CRITICAL RULES:
 1) Atomicity: each atom = ONE atomic change. 6 added dependencies = 6 atoms, not 1.
