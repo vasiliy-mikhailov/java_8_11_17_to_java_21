@@ -108,10 +108,18 @@ def split_diff_by_hunks(diff_text, chunk_char_cap=40000):
     if not hunk_starts:
         return [diff_text[i:i+chunk_char_cap] for i in range(0, max(1, len(diff_text)), chunk_char_cap)]
     header = "\n".join(lines[:hunk_starts[0]])
-    hunks = []
+    body_budget = max(chunk_char_cap - len(header) - 100, 4000)
+    raw_hunks = []
     for i, st in enumerate(hunk_starts):
         end = hunk_starts[i+1] if i+1 < len(hunk_starts) else len(lines)
-        hunks.append("\n".join(lines[st:end]))
+        raw_hunks.append("\n".join(lines[st:end]))
+    hunks = []
+    for h in raw_hunks:
+        if len(h) <= body_budget:
+            hunks.append(h)
+        else:
+            for j in range(0, len(h), body_budget):
+                hunks.append(h[j:j+body_budget])
     chunks, cur = [], header
     for h in hunks:
         candidate = cur + "\n" + h if cur != header else cur + "\n" + h
