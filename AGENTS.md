@@ -1,7 +1,7 @@
 0. **Fitness function: writing to AGENTS.md**
     - **Why exists:** to keep AGENTS.md compact, understandable, fit, aligned — unveiling AI agents' capability to search for solutions on their own given measurable goals and constraints in ralph loops.
-    - **Contract and constraints:** every item has a Why exists as its first sub-clause; no implementation instructions the agent can fill itself, no enumerations that age, no justifications outside the Why clause; search hints are only the parts an intelligent agent can't infer on its own; if a fitness produces output other fitnesses depend on, the obligation lives in this clause as a contract.
-    - **Search hints:** read → why → intent — when revisiting a clause, ask "why is this here?"; if the answer is implementation detail, enumeration, or justification that belongs in another fitness's Why, strip it back to the rule itself.
+    - **Contract and constraints:** every item has a Why exists as its first sub-clause; if a fitness produces output other fitnesses depend on, the obligation lives in this clause as a contract.
+    - **Search hints:** read → why → intent — when revisiting a clause, ask "why is this here?"; strip implementation instructions the agent can fill itself, enumerations that age, justifications outside the Why clause; search hints contain only the parts an intelligent agent can't infer on its own.
     - **Reward:** cuts that lose words without losing the rule.
     - **Repeat:** every editing pass.
 1. **Fitness function: discover Java migration recipe**
