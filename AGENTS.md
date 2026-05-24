@@ -10,7 +10,7 @@
    - **Reward:** cuts that lose words without losing the rule.
    - **Repeat:** every editing pass.
 1. **Workdir:** `$HOME/java_8_11_17_to_java_21`.
-2. **Containment:** all build toolchains and recipe execution run inside Docker. If a host resource this project needs is held by something unrelated, free it in favour of this project. External-artifact caching is governed by item 11.
+2. **Containment:** all build toolchains and recipe execution run inside Docker. If a host resource this project needs is held by something unrelated, free it in favour of this project.
 3. **Access:** SSH calls to the work host share one session, not one per command.
 4. **Fitness (recipe):** find an OpenRewrite recipe composition that converges each repo in `java21-migration-dataset.json` to the form humans committed.
     - **Constraints:** declarative YAML only; each adjacent step in a lineage is its own stage; each stage runs under the JDK matching its output level, accepts exactly one input level, and its source+pom edits persist into the next stage's working tree; emits per (repo, stage) cells with build outcome and recipe-output, consumed by item 7 (failing cells as its input set) and item 13 (recipe-output for intent extraction).
