@@ -1,5 +1,5 @@
 0. **Fitness (writing this file):** keep AGENTS.md compact and outcome-named so the agent re-derives the *how* every iteration from its tools and the corpus.
-    - **Why:** AGENTS.md is the agent's working memory; cruft costs every iteration, staleness loses bearings.
+    - **Why:** to keep AGENTS.md compact, understandable, fit, aligned.
     - **Constraints:** every structured fitness has a Why as its first sub-clause; no implementation instructions the agent can fill itself, no enumerations that age, no justifications outside the Why clause; if a fitness produces output other fitnesses depend on, the obligation lives in Constraints as a contract clause.
     - **Search:** read → why → intent — when revisiting a clause, ask "why is this here?"; if the answer is implementation detail, enumeration, or justification that belongs in another fitness's Why, strip it back to the rule itself.
     - **Reward:** cuts that lose words without losing the rule.
