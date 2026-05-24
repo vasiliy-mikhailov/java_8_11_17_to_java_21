@@ -1,0 +1,170 @@
+diff --git a/runningdinner-backend/src/main/java/org/runningdinner/admin/message/MessageService.java b/runningdinner-backend/src/main/java/org/runningdinner/admin/message/MessageService.java
+index d60cd44..bd441f9 100644
+--- a/runningdinner-backend/src/main/java/org/runningdinner/admin/message/MessageService.java
++++ b/runningdinner-backend/src/main/java/org/runningdinner/admin/message/MessageService.java
+@@ -51,6 +51,7 @@ import org.runningdinner.core.dinnerplan.TeamRouteBuilder;
+ import org.runningdinner.mail.MailService;
+ import org.runningdinner.mail.formatter.DinnerRouteMessageFormatter;
+ import org.runningdinner.mail.formatter.ParticipantMessageFormatter;
++import org.runningdinner.mail.formatter.RunningDinnerEventCreatedMessageFormatter;
+ import org.runningdinner.mail.formatter.TeamArrangementMessageFormatter;
+ import org.runningdinner.mail.sendgrid.SuppressedEmail;
+ import org.runningdinner.participant.Participant;
+@@ -99,6 +100,9 @@ public class MessageService {
+   @Autowired
+   private DinnerRouteMessageFormatter dinnerRouteMessageFormatter;
+   
++  @Autowired
++  private RunningDinnerEventCreatedMessageFormatter runningDinnerEventCreatedMessageFormatter;
++  
+   @Autowired
+   private MessageJobProcessorHelperService messageJobProcessorHelperService;
+   
+@@ -130,26 +134,30 @@ public class MessageService {
+ 
+     final String replyTo = runningDinner.getEmail();
+     
+-    return participants
+-      .stream()
+-      .filter(p -> StringUtils.isNotEmpty(p.getEmail()))
+-      .map(p -> {
+-        MessageTask messageTask = new MessageTask(parentMessageJob, runningDinner);
+-        String text = participantMessageFormatter.formatParticipantMessage(p, participantMessage);
+-        messageTask.setMessage(new Message(participantMessage.getSubject(), text, replyTo));
+-        messageTask.setRecipientEmail(getRecipientEmail(p));
+-        return messageTask;
+-      })
+-      .collect(Collectors.toList());
++    List<MessageTask> result = participants
++                                .stream()
++                                .filter(p -> StringUtils.isNotEmpty(p.getEmail()))
++                                .map(p -> {
++                                  MessageTask messageTask = new MessageTask(parentMessageJob, runningDinner);
++                                  String text = participantMessageFormatter.formatParticipantMessage(runningDinner, p, participantMessage);
++                                  messageTask.setMessage(new Message(participantMessage.getSubject(), text, replyTo));
++                                  messageTask.setRecipientEmail(getRecipientEmail(p));
++                                  return messageTask;
++                                })
++                                .collect(Collectors.toList());
++    
++    return distinctMessageTasksByRecipient(result);
+   }
+ 
+   public List<PreviewMessage> getParticipantMailPreview(@ValidateAdminId String adminId, ParticipantMessage participantMessage) {
+ 
++    RunningDinner runningDinner = runningDinnerService.findRunningDinnerByAdminId(adminId);
++    
+     // Can of course be optimized to not load too much participants...:
+     List<Participant> participants = getParticipants(adminId, participantMessage);
+     Participant participant = participants.get(0);
+     Assert.state(participants.size() == 1, "Expected exactly one participant for preview but found " + participants.size());
+-    String message = participantMessageFormatter.formatParticipantMessage(participant, participantMessage);
++    String message = participantMessageFormatter.formatParticipantMessage(runningDinner, participant, participantMessage);
+     return Collections.singletonList(new PreviewMessage(participant.getId(), message));
+   }
+   
+@@ -185,7 +193,7 @@ public class MessageService {
+     
+     final RunningDinner runningDinner = runningDinnerService.findRunningDinnerByAdminId(adminId);
+    
+-    return team.getTeamMembers()
++    return getTeamMembersForPreview(team)
+                   .stream()
+                   .map(teamMember -> teamArrangementMessageFormatter.formatTeamMemberMessage(runningDinner, teamMember, team, teamMessage))
+                   .map(message -> new PreviewMessage(team.getId(), message))
+@@ -227,7 +235,7 @@ public class MessageService {
+     
+     final RunningDinner runningDinner = runningDinnerService.findRunningDinnerByAdminId(adminId);
+     
+-    List<PreviewMessage> result = team.getTeamMembers()
++    List<PreviewMessage> result = getTeamMembersForPreview(team)
+                                         .stream()
+                                         .map(teamMember -> dinnerRouteMessageFormatter.formatDinnerRouteMessage(runningDinner, teamMember, team, dinnerRoute, dinnerRouteMessage))
+                                         .map(message -> new PreviewMessage(team.getId(), message))
+@@ -260,9 +268,10 @@ public class MessageService {
+   }
+   
+   @Transactional(propagation = Propagation.REQUIRES_NEW)
+-  public MessageJob sendNewRunningDinnerMessage(RunningDinnerRelatedMessage newRunningDinnerMessage) {
++  public MessageJob sendRunningDinnerCreatedMessage(RunningDinner runningDinner) {
+     
+-    final MessageJob messageJob = createNewRunningDinnerMessageJob(newRunningDinnerMessage);
++    RunningDinnerRelatedMessage runningDinnerCreatedMessage = runningDinnerEventCreatedMessageFormatter.formatRunningDinnerCreatedMessage(runningDinner);
++    final MessageJob messageJob = createNewRunningDinnerMessageJob(runningDinnerCreatedMessage);
+     executeSendMessagesJobAfterCommit(messageJob);
+     return messageJob;
+   }
+@@ -358,6 +367,7 @@ public class MessageService {
+       messageTask.setRecipientEmail(getRecipientEmail(teamMember));
+       messageTasks.add(messageTask);
+     }
++    messageTasks = distinctMessageTasksByRecipient(messageTasks);
+ 
+     return saveMessageJob(result, messageTasks); // Activity is created in other place
+   }
+@@ -373,7 +383,7 @@ public class MessageService {
+   
+   public List<MessageTask> findMessageTasks(String adminId, UUID messageJobId) {
+ 
+-    return messageTaskRepository.findByAdminIdAndParentJobIdOrderBySendingStartTimeAscCreatedAtAsc(adminId, messageJobId);
++    return messageTaskRepository.findByAdminIdAndParentJobIdOrderBySendingStartTimeDescCreatedAtDesc(adminId, messageJobId);
+   }
+   
+   public MessageJob findMessageJob(@ValidateAdminId String adminId, UUID messageJobId) {
+@@ -529,7 +539,7 @@ public class MessageService {
+         result.add(messageTask);
+       }
+     }
+-    return result;
++    return distinctMessageTasksByRecipient(result);
+   }
+   
+   private List<MessageTask> newDinnerRouteMessageTasks(RunningDinner runningDinner, List<Team> teams, DinnerRouteMessage dinnerRouteMessage, MessageJob parentMessageJob) {
+@@ -553,7 +563,7 @@ public class MessageService {
+         result.add(messageTask);
+       }
+     }
+-    return result;
++    return distinctMessageTasksByRecipient(result);
+   }
+   
+   private MessageJob createDinnerRouteMessagesJob(@ValidateAdminId String adminId, DinnerRouteMessage dinnerRouteMessage) {
+@@ -688,6 +698,19 @@ public class MessageService {
+     }
+   }
+   
++  private static List<MessageTask> distinctMessageTasksByRecipient(List<MessageTask> messageTasks) {
++    Set<String> recipients = new HashSet<>();
++    List<MessageTask> result = new ArrayList<MessageTask>(messageTasks.size());
++    for (MessageTask mt : messageTasks) {
++      if (recipients.contains(mt.getRecipientEmail())) {
++        continue;
++      }
++      result.add(mt);
++      recipients.add(mt.getRecipientEmail());
++    }
++    return result;
++  }
++  
+   private void executeSendMessagesJobAfterCommit(final MessageJob messageJob) {
+ 
+     checkAcknowledgedDinner(messageJob);
+@@ -714,4 +737,18 @@ public class MessageService {
+     }
+   }
+ 
++  private static List<Participant> getTeamMembersForPreview(Team team) {
++    
++    List<Participant> teamMembers = team.getTeamMembersOrdered();
++    Set<String> recipients = new HashSet<>();
++    List<Participant> result = new ArrayList<Participant>(teamMembers.size());
++    for (Participant teamMember : teamMembers) {
++      if (teamMember.getEmail() == null || recipients.contains(teamMember.getEmail())) {
++        continue;
++      }
++      result.add(teamMember);
++      recipients.add(teamMember.getEmail());
++    }
++    return result;
++  }
+ }
