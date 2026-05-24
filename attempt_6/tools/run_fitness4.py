@@ -16,9 +16,13 @@ For each distinct INTENT (the purpose of a change, not its surface text), emit o
 {
   "kind":         "<short snake_case label>",
   "general_idea": "<one sentence describing the migration purpose>",
-  "human_impl":   "<brief concrete snippet showing what was done>",
+  "before":       "<brief snippet of the older form (\"-\" side) or \"\" if pure addition>",
+  "after":        "<brief snippet of the newer form (\"+\" side) or \"\" if pure removal>",
   "bucket":       "breaking | polishment"
 }
+
+Both before and after are REQUIRED — the recipe author needs to match against the before form
+and emit the after form. For an addition: before="". For a removal: after="".
 
 CRITICAL RULES:
 1) Atomicity: each atom = ONE atomic change. 6 added dependencies = 6 atoms, not 1.
@@ -96,6 +100,14 @@ def gen_human_diffs(repo, sha_from, sha_to):
         return None, None
     name_status = ns.stdout.decode(errors="replace").strip().splitlines()
     modified = [ln.split(maxsplit=1)[1] for ln in name_status if ln.startswith("M\t") or ln.startswith("M ")]
+    # File-level pre-filter: skip files whose content reflects tooling state, not human intent.
+    # Defense in depth alongside SYSTEM prompt rule #6.
+    _SKIP_PATTERNS = ("package-lock.json", "yarn.lock", "poetry.lock", "Pipfile.lock",
+                      "composer.lock", "Cargo.lock", "Gemfile.lock", "pnpm-lock.yaml")
+    modified = [f for f in modified
+                if not any(f.endswith(p) or ("/"+p) in ("/"+f) for p in _SKIP_PATTERNS)
+                and "/node_modules/" not in ("/"+f)
+                and not f.endswith(".md")]
     modified.sort(key=lambda x: (0 if x.endswith(".java") else 1 if x.endswith("pom.xml") else 2, x))
     diffs = {}
     for rel in modified[:12]:
@@ -243,10 +255,17 @@ def main():
             intents = ask_qwen(rel, p["jv_from"], p["jv_to"], dt, commit_log)
             all_int[rel] = intents
             n_int += len(intents)
+        meta = {"repo":p["repo"],"stage":f"J{p['jv_from']}->J{p['jv_to']}",
+                "family":p.get("family"),"sha_from":p["sha_from"],"sha_to":p["sha_to"]}
         with open(f"{out_sub}/intents.json", "w") as f:
-            json.dump({"meta":{"repo":p["repo"],"stage":f"J{p['jv_from']}->J{p['jv_to']}",
-                              "family":p.get("family"),"sha_from":p["sha_from"],"sha_to":p["sha_to"]},
-                       "by_file":all_int}, f, indent=2)
+            json.dump({"meta": meta, "by_file": all_int}, f, indent=2)
+        # Split by bucket (contract with item 1 and item 3): keep recipe-search context tight.
+        breaking = {rel: [it for it in xs if it.get("bucket") == "breaking"] for rel, xs in all_int.items()}
+        polishment = {rel: [it for it in xs if it.get("bucket") != "breaking"] for rel, xs in all_int.items()}
+        with open(f"{out_sub}/breaking.json", "w") as f:
+            json.dump({"meta": meta, "by_file": {k: v for k, v in breaking.items() if v}}, f, indent=2)
+        with open(f"{out_sub}/polishment.json", "w") as f:
+            json.dump({"meta": meta, "by_file": {k: v for k, v in polishment.items() if v}}, f, indent=2)
         with lock:
             done_ct[0] += 1
             jv_files = sum(1 for k in diffs if k.endswith(".java"))
