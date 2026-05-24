@@ -31,7 +31,7 @@
 6. **Fitness (dataset rediscovery):** curate `java21-migration-dataset.json` as distinct-owner lineage samples per (oldest-Java-version × dependency family) cell, where oldest-Java-version ∈ {8, 11, 17} and dependency family ∈ the popular dependencies that OpenRewrite targets as having breaking changes for Java 21 migration. Each entry is a *lineage* — one repo tracked across its Java-version history, with a `commit_sha` recorded at every Java version from the oldest through 21, and each `commit_sha` baseline-buildable inside the runner container under the JDK matching that commit's declared Java version. Iterate candidates through a ralph loop, balancing the matrix.
 
 7. **Fitness (per-failing-repo refinement):** raise the corpus build-success rate past where coarse recipe mutations plateau, leveraging vLLM Qwen 3.6 27B FP8 and Claude as solution-finder + judges throughout.
-   - **Constraints:** declarative configuration deltas only.
+   - **Constraints:** declarative configuration deltas only; contract with item 4 — wins (build_post 0→1 flips on the corpus) fold into item 4's corpus build-success aggregate.
    - **Search:** ground each candidate fix in a known community workaround.
    - **Reward:** real `build_post 0 → 1` flips net of regressions on the full corpus.
    - **Repeat:** simplest cluster first; stop when only bespoke engineering remains.
