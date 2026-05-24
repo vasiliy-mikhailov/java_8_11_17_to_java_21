@@ -12,14 +12,15 @@ os.makedirs(CACHE_ROOT, exist_ok=True)
 SYSTEM = """You extract HUMAN INTENTS from a unified diff between two commits of the same repo.
 Older commit on '-' side, newer on '+' side. The author moved this code from one Java version to the next.
 
-For each distinct INTENT (the purpose of a change, not its surface text), emit one JSON atom:
+For each distinct INTENT (the purpose of a change, not its surface text), emit one JSON atom.
+Fields MUST appear in this exact order (reasoning first, then patterns, then labels):
 {
-  "kind":         "<short snake_case label>",
   "general_idea": "<one sentence describing the migration purpose>",
+  "why_exists":   "<for breaking only: what compile/runtime failure occurs without this change; \"\" for polishment>",
   "before":       "<brief snippet of the older form (\"-\" side) or \"\" if pure addition>",
   "after":        "<brief snippet of the newer form (\"+\" side) or \"\" if pure removal>",
-  "bucket":       "breaking | polishment",
-  "why_exists":   "<for breaking only: what compile/runtime failure occurs without this change; \"\" for polishment>"
+  "kind":         "<short snake_case label>",
+  "bucket":       "breaking | polishment"
 }
 
 Both before and after are REQUIRED — the recipe author needs to match against the before form
@@ -176,6 +177,22 @@ def _post_qwen(diff_chunk, file_path, jv_from, jv_to, log_section):
             time.sleep(2 ** attempt)
 
 
+INTENT_FIELD_ORDER = ["general_idea", "why_exists", "before", "after", "kind", "bucket"]
+
+
+def canonical_atom(atom):
+    """Return a new dict with intent fields in the contract-mandated order.
+    Unknown fields are appended at the end (defensive)."""
+    out = {}
+    for k in INTENT_FIELD_ORDER:
+        if k in atom:
+            out[k] = atom[k]
+    for k, v in atom.items():
+        if k not in out:
+            out[k] = v
+    return out
+
+
 def ask_qwen(file_path, jv_from, jv_to, diff_text, commit_log):
     log_section = ("\nGIT LOG (commits between snapshots):\n" + commit_log[:2000]) if commit_log else ""
     chunks = split_diff_by_hunks(diff_text, chunk_char_cap=40000)
@@ -256,7 +273,7 @@ def main():
         n_int = 0
         for rel, dt in diffs.items():
             intents = ask_qwen(rel, p["jv_from"], p["jv_to"], dt, commit_log)
-            all_int[rel] = intents
+            all_int[rel] = [canonical_atom(a) for a in (intents or [])]
             n_int += len(intents)
         meta = {"repo":p["repo"],"stage":f"J{p['jv_from']}->J{p['jv_to']}",
                 "family":p.get("family"),"sha_from":p["sha_from"],"sha_to":p["sha_to"]}
