@@ -4,8 +4,10 @@ from datetime import datetime, timezone
 OBS_DIR = "/var/log/observe"
 DIGEST = f"{OBS_DIR}/digest.jsonl"
 CTX_BUDGET = 128 * 1024
-COMPACT_AT = int(CTX_BUDGET * 0.50)   # 50% of budget — leaves room for system+output
-HARD_CAP = int(CTX_BUDGET * 0.70)     # never send more than this
+OUTPUT_BUDGET = 4000
+SAFETY = 2000  # system prompt + wrappers
+COMPACT_AT = int(CTX_BUDGET * 0.40)   # trigger compaction at 40% of budget
+HARD_CAP = CTX_BUDGET - OUTPUT_BUDGET - SAFETY  # never send more than this
 RECENT_KEEP = 8
 DEEP_REVIEW_S = 90
 TAIL_INTERVAL_S = 5
@@ -21,7 +23,7 @@ COMPACT_SYSTEM = (
     "JSON only, no prose.")
 
 
-def approx_tokens(t): return len(t) // 3
+def approx_tokens(t): return (len(t) + 1) // 2  # conservative upper bound
 
 
 def ask_qwen(system, user, max_tokens=4000):
