@@ -82,18 +82,24 @@ def gen_human_diffs(repo, sha_from, sha_to):
     if mirror is None: return None, None
     if not ensure_sha(mirror, sha_from): return None, None
     if not ensure_sha(mirror, sha_to): return None, None
-    log_p = subprocess.run(["git","--git-dir",mirror,"log","--oneline","--no-decorate",f"{sha_from}..{sha_to}"],
-                           capture_output=True, timeout=30)
-    commit_log = log_p.stdout.decode(errors="replace").strip()
-    ns = subprocess.run(["git","--git-dir",mirror,"diff","--name-status",sha_from,sha_to],
-                        capture_output=True, timeout=60)
+    try:
+        log_p = subprocess.run(["git","--git-dir",mirror,"log","--oneline","--no-decorate",f"{sha_from}..{sha_to}"],
+                               capture_output=True, timeout=30)
+        commit_log = log_p.stdout.decode(errors="replace").strip()
+        ns = subprocess.run(["git","--git-dir",mirror,"diff","--name-status",sha_from,sha_to],
+                            capture_output=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return None, None
     name_status = ns.stdout.decode(errors="replace").strip().splitlines()
     modified = [ln.split(maxsplit=1)[1] for ln in name_status if ln.startswith("M\t") or ln.startswith("M ")]
     modified.sort(key=lambda x: (0 if x.endswith(".java") else 1 if x.endswith("pom.xml") else 2, x))
     diffs = {}
     for rel in modified[:12]:
-        r = subprocess.run(["git","--git-dir",mirror,"diff",sha_from,sha_to,"--",rel],
-                           capture_output=True, timeout=20)
+        try:
+            r = subprocess.run(["git","--git-dir",mirror,"diff",sha_from,sha_to,"--",rel],
+                               capture_output=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            continue
         text = r.stdout.decode(errors="replace")
         if text.strip(): diffs[rel] = text  # no pre-truncation; ask_qwen hunk-splits
     return commit_log, diffs
