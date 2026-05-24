@@ -16,7 +16,7 @@ IMAGE = "j21-fitness:latest"
 OUT = f"{HERE}/attempt_6/ff1_results.json"
 RUN_ONE_STAGE = f"{HERE}/attempt_6/tools/run_one_stage_v2.sh"
 
-RECIPE_NAME_FOR = {11: "org.openrewrite.java.migrate.UpgradeToJava11",
+RECIPE_NAME_FOR = {11: "org.openrewrite.java.migrate.Java8toJava11",   # NOT UpgradeToJava11 — different naming
                    17: "org.openrewrite.java.migrate.UpgradeToJava17",
                    21: "org.openrewrite.java.migrate.UpgradeToJava21"}
 
@@ -195,9 +195,28 @@ def main():
     if limit:
         stages = stages[:limit]
 
+    # Resume: skip stages whose result is already recorded AND succeeded recipe step
+    # (or where the result was a non-recoverable error). Re-run J8->J11 stages because
+    # they were run with the wrong recipe name.
+    existing = []
+    if os.path.exists(OUT):
+        try: existing = json.load(open(OUT))
+        except: existing = []
+    done_keys = set()
+    for x in existing:
+        # Only treat as "done" if recipe_applied is True (J8->J11 with old buggy name had recipe_applied=False)
+        if x.get("recipe_applied") is True:
+            done_keys.add((x["repo"], x["sha_from"]))
+    if done_keys:
+        before = len(stages)
+        stages = [s for s in stages if (s["repo"], s["sha_from"]) not in done_keys]
+        print(f"resume: {before - len(stages)} stages already done", flush=True)
+    # Preserve old results, append new ones
+    results_existing = [x for x in existing if (x["repo"], x["sha_from"]) in done_keys]
+
     print(f"total adjacent stages: {len(stages)}", flush=True)
 
-    results = []
+    results = list(results_existing)
     lock = threading.Lock()
 
     def go(i_s):
@@ -208,7 +227,7 @@ def main():
             json.dump(results, open(OUT, "w"), indent=2)
         return r
 
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    with ThreadPoolExecutor(max_workers=6) as ex:
         list(ex.map(go, enumerate(stages)))
 
     pre_ok = sum(1 for r in results if r.get("build_pre"))
