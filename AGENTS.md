@@ -14,7 +14,7 @@
 3. **Containment:** all build toolchains and recipe execution run inside Docker. If a host resource this project needs is held by something unrelated, free it in favour of this project.
 4. **Access:** SSH calls to the work host share one session, not one per command.
 5. **Fitness (vLLM spin-up):** stand up an OpenAI-compatible chat-completion endpoint serving a tool-capable model.
-    - **Why:** downstream items need a shared brain for synthesis and judgement; without it they each re-invent their own.
+    - **Why:** save paid-API tokens by serving high-volume mechanical inference locally.
     - **Constraints:** rejects unauthenticated requests; reachable from inside runner containers; contract with items 1, 7, 11 — endpoint accepts authenticated tool-capable chat completions from within their containers.
     - **Search:** ralph loop over container, model, and reverse-proxy config.
     - **Reward:** consuming items report uninterrupted service.
