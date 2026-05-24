@@ -105,7 +105,7 @@ def ask_qwen(file_path, jv_from, jv_to, diff_text, commit_log):
     body = {"model":"qwen3.6-27b-fp8","messages":[
             {"role":"system","content":SYSTEM},
             {"role":"user","content":user}],
-            "temperature":0.0,"max_tokens":5000,"chat_template_kwargs":{"enable_thinking":False}}
+            "temperature":0.0,"max_tokens":16000,"chat_template_kwargs":{"enable_thinking":False}}
     req = urllib.request.Request("http://localhost:8000/v1/chat/completions",
         data=json.dumps(body).encode(),
         headers={"Authorization":"Bearer sk-ef2926520a83b7f6efac7f4dc5b049842b4b2baebfdc18b69b76220f29fdf272","Content-Type":"application/json"})

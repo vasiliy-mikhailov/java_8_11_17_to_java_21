@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 OBS_DIR = "/var/log/observe"
 DIGEST = f"{OBS_DIR}/digest.jsonl"
 CTX_BUDGET = 128 * 1024
-OUTPUT_BUDGET = 4000
+OUTPUT_BUDGET = 16000
 SAFETY = 2000  # system prompt + wrappers
 COMPACT_AT = int(CTX_BUDGET * 0.40)   # trigger compaction at 40% of budget
 HARD_CAP = CTX_BUDGET - OUTPUT_BUDGET - SAFETY  # never send more than this
@@ -26,7 +26,7 @@ COMPACT_SYSTEM = (
 def approx_tokens(t): return (len(t) + 1) // 2  # conservative upper bound
 
 
-def ask_qwen(system, user, max_tokens=4000):
+def ask_qwen(system, user, max_tokens=16000):
     body = {"model":"qwen3.6-27b-fp8","messages":[
             {"role":"system","content":system},{"role":"user","content":user}],
             "temperature":0.0,"max_tokens":max_tokens,"chat_template_kwargs":{"enable_thinking":False}}
