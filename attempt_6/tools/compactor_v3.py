@@ -107,26 +107,52 @@ def per_sample_alarm():
     print(f"ALARM: {alarm[:200]}", flush=True)
 
 
+def _serialize(buf): return "\n".join(json.dumps(b)[:300] for b in buf)
+
+
+def chunk_buffer(buf, chunk_token_cap):
+    """Split buffer into time-ordered chunks whose serialization fits chunk_token_cap each."""
+    chunks, cur, cur_tok = [], [], 0
+    for b in buf:
+        t = approx_tokens(json.dumps(b)[:300])
+        if cur and cur_tok + t > chunk_token_cap:
+            chunks.append(cur); cur, cur_tok = [], 0
+        cur.append(b); cur_tok += t
+    if cur: chunks.append(cur)
+    return chunks
+
+
+def summarize_chunk(buf_chunk, prior_summary):
+    user = "(Prior compaction:)\n" + (prior_summary or "(none)") + "\n\n(Recent trajectory:)\n" + _serialize(buf_chunk)
+    resp = ask_qwen(COMPACT_SYSTEM, user)
+    return resp.get("compacted_summary","") or "", resp.get("sustained_anomalies",[]) or []
+
+
 def compact():
     global buffer, compacted_summary, last_deep
-    # Truncate buffer if needed to stay under HARD_CAP
-    while buffer:
-        buf_text = "\n".join(json.dumps(b)[:300] for b in buffer)
-        if approx_tokens((compacted_summary or "") + buf_text) <= HARD_CAP:
-            break
-        buffer = buffer[len(buffer)//4:]  # drop oldest 25%
-    buf_text = "\n".join(json.dumps(b)[:300] for b in buffer)
-    buf_tokens = approx_tokens((compacted_summary or "") + buf_text)
-    print(f"COMPACT buf={buf_tokens} tokens, samples={len(buffer)}", flush=True)
-    user = "(Prior compaction:)\n" + (compacted_summary or "(none)") + "\n\n(Recent trajectory:)\n" + buf_text
-    resp = ask_qwen(COMPACT_SYSTEM, user)
-    compacted_summary = resp.get("compacted_summary","")
-    sustained = resp.get("sustained_anomalies",[]) or []
+    prior_tok = approx_tokens(compacted_summary or "")
+    chunk_cap = max(HARD_CAP - prior_tok - 1000, 10000)  # reserve room for prior + wrappers
+    chunks = chunk_buffer(buffer, chunk_cap)
+    total_tokens = sum(approx_tokens(_serialize(c)) for c in chunks)
+    print(f"COMPACT samples={len(buffer)} -> {len(chunks)} chunk(s), {total_tokens} tok, prior={prior_tok} tok", flush=True)
+    chunk_summaries, all_sustained = [], []
+    for c in chunks:
+        summ, sus = summarize_chunk(c, compacted_summary)
+        chunk_summaries.append(summ); all_sustained.extend(sus)
+    if len(chunks) == 1:
+        new_summary, sustained_final = chunk_summaries[0], all_sustained
+    else:
+        merge_user = ("(Prior compaction:)\n" + (compacted_summary or "(none)") +
+                      "\n\n(Chunk summaries to merge into one:)\n" + "\n---\n".join(chunk_summaries))
+        merge_resp = ask_qwen(COMPACT_SYSTEM, merge_user)
+        new_summary = merge_resp.get("compacted_summary","") or " | ".join(chunk_summaries)
+        sustained_final = merge_resp.get("sustained_anomalies") or all_sustained
+    compacted_summary = new_summary
     entry = {"t": datetime.now(timezone.utc).isoformat(), "kind":"compaction",
-             "samples_compacted": len(buffer), "input_tokens": buf_tokens,
-             "compacted_summary": compacted_summary, "sustained_anomalies": sustained}
+             "samples_compacted": len(buffer), "input_tokens": total_tokens, "chunks": len(chunks),
+             "compacted_summary": compacted_summary, "sustained_anomalies": sustained_final}
     with open(DIGEST, "a") as f: f.write(json.dumps(entry)+"\n")
-    print(f"COMPACT done. sustained_anomalies={sustained}", flush=True)
+    print(f"COMPACT done. chunks={len(chunks)} sustained={sustained_final[:3]}", flush=True)
     buffer = buffer[-RECENT_KEEP:]
     last_deep = time.time()
 

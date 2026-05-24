@@ -95,13 +95,36 @@ def gen_human_diffs(repo, sha_from, sha_to):
         r = subprocess.run(["git","--git-dir",mirror,"diff",sha_from,sha_to,"--",rel],
                            capture_output=True, timeout=20)
         text = r.stdout.decode(errors="replace")
-        if text.strip(): diffs[rel] = text[:9000]
+        if text.strip(): diffs[rel] = text  # no pre-truncation; ask_qwen hunk-splits
     return commit_log, diffs
 
 
-def ask_qwen(file_path, jv_from, jv_to, diff_text, commit_log):
-    log_section = ("\nGIT LOG (commits between snapshots):\n" + commit_log[:2000]) if commit_log else ""
-    user = f"File: {file_path}\nStage: J{jv_from} -> J{jv_to}{log_section}\n\nDIFF:\n{diff_text[:8000]}"
+def split_diff_by_hunks(diff_text, chunk_char_cap=40000):
+    """Split a unified diff into chunks at hunk boundaries (@@ ... @@), each <= chunk_char_cap.
+    The file header (everything before first @@) is repeated in each chunk so the LLM sees
+    which file each hunk belongs to. Binary diffs and degenerate cases fall back to slicing."""
+    lines = diff_text.split("\n")
+    hunk_starts = [i for i, l in enumerate(lines) if l.startswith("@@ ")]
+    if not hunk_starts:
+        return [diff_text[i:i+chunk_char_cap] for i in range(0, max(1, len(diff_text)), chunk_char_cap)]
+    header = "\n".join(lines[:hunk_starts[0]])
+    hunks = []
+    for i, st in enumerate(hunk_starts):
+        end = hunk_starts[i+1] if i+1 < len(hunk_starts) else len(lines)
+        hunks.append("\n".join(lines[st:end]))
+    chunks, cur = [], header
+    for h in hunks:
+        candidate = cur + "\n" + h if cur != header else cur + "\n" + h
+        if cur != header and len(cur) + 1 + len(h) > chunk_char_cap:
+            chunks.append(cur); cur = header + "\n" + h
+        else:
+            cur = (cur + "\n" + h) if cur else h
+    if cur and cur != header: chunks.append(cur)
+    return chunks or [diff_text[:chunk_char_cap]]
+
+
+def _post_qwen(diff_chunk, file_path, jv_from, jv_to, log_section):
+    user = f"File: {file_path}\nStage: J{jv_from} -> J{jv_to}{log_section}\n\nDIFF:\n{diff_chunk}"
     body = {"model":"qwen3.6-27b-fp8","messages":[
             {"role":"system","content":SYSTEM},
             {"role":"user","content":user}],
@@ -115,9 +138,19 @@ def ask_qwen(file_path, jv_from, jv_to, diff_text, commit_log):
                 content = (json.loads(r.read())["choices"][0]["message"].get("content") or "").strip()
             m = re.search(r"\[.*\]", content, re.DOTALL)
             return json.loads(m.group(0)) if m else []
-        except Exception as e:
+        except Exception:
             if attempt == 2: return []
             time.sleep(2 ** attempt)
+
+
+def ask_qwen(file_path, jv_from, jv_to, diff_text, commit_log):
+    log_section = ("\nGIT LOG (commits between snapshots):\n" + commit_log[:2000]) if commit_log else ""
+    chunks = split_diff_by_hunks(diff_text, chunk_char_cap=40000)
+    all_intents = []
+    for ch in chunks:
+        intents = _post_qwen(ch, file_path, jv_from, jv_to, log_section) or []
+        all_intents.extend(intents)
+    return all_intents
 
 
 def commit_progress(n_done):
