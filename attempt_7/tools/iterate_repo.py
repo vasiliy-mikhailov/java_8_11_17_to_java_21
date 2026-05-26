@@ -29,6 +29,8 @@ from run_sequenced_java import (
     plan_for, write_recipe_yaml, shallow_fetch, docker_phase,
     WORK, BASE, ATTEMPT7,
 )
+from test_conservation import parse_surefire_dir, check_test_conservation, fmt_regression, clear_surefire
+
 
 OUT_DIR = f"{ATTEMPT7}/per_repo_iter"
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -197,7 +199,7 @@ def extract_json(text):
     return None
 
 
-def run_chain(stage, chain, *, log_tail_bytes=8192):
+def run_chain(stage, chain, *, log_tail_bytes=8192, test_conservation=False):
     """Run one chain on a fresh clone of the repo. Returns trajectory dict.
 
     `chain` is list of (label, jdk, recipes).
@@ -214,6 +216,17 @@ def run_chain(stage, chain, *, log_tail_bytes=8192):
         if not shallow_fetch(repo, sha_from, work):
             traj["error"] = "checkout_failed"
             return traj
+
+
+        # Test-conservation pre-phase: run mvn test on unmodified clone under jv_from
+        pre_passed = set(); pre_failed = set()
+        if test_conservation:
+            tp_logs = tempfile.mkdtemp(prefix="iter_tcpre_", dir=WORK)
+            clear_surefire(work)
+            rc_tp, log_tp = docker_phase(work, recipes_dir, tp_logs, "test_pre", jf, timeout=900)
+            pre_passed, pre_failed = parse_surefire_dir(work)
+            traj["test_pre"] = {"rc": rc_tp, "passed": len(pre_passed), "failed": len(pre_failed)}
+            shutil.rmtree(tp_logs, ignore_errors=True)
         for label, jdk, recipe_list in chain:
             rfile = os.path.join(recipes_dir, f"{label}.yml")
             write_recipe_yaml(rfile, f"org.example.iter.{slug}.{label}", recipe_list)
@@ -238,12 +251,41 @@ def run_chain(stage, chain, *, log_tail_bytes=8192):
             if not entry["recipe_ok"] or not entry.get("build_ok", True):
                 traj["aborted_at"] = label
                 break
+        # Test-conservation post-phase: only run if chain compiled clean
+        post_passed = set(); post_failed = set()
+        compile_pass = bool(traj["steps"]) and traj["steps"][-1].get("recipe_ok") and traj["steps"][-1].get("build_ok")
+        if test_conservation and compile_pass:
+            tp_logs = tempfile.mkdtemp(prefix="iter_tcpost_", dir=WORK)
+            clear_surefire(work)
+            rc_tp, log_tp = docker_phase(work, recipes_dir, tp_logs, "test_post", jt, timeout=900)
+            post_passed, post_failed = parse_surefire_dir(work)
+            traj["test_post"] = {"rc": rc_tp, "passed": len(post_passed), "failed": len(post_failed)}
+            shutil.rmtree(tp_logs, ignore_errors=True)
+
         traj["finished_at"] = time.time()
         last = traj["steps"][-1] if traj["steps"] else None
-        traj["final_status"] = (
-            "PASS" if last and last.get("recipe_ok") and last.get("build_ok")
-            else "FAIL_at_" + (last.get("step", "?") if last else "no_steps")
-        )
+        compile_pass = bool(last) and last.get("recipe_ok") and last.get("build_ok")
+
+        if test_conservation and compile_pass:
+            if not pre_passed:
+                # empty pre — fall back to compile-only PASS (don't penalise repos with no tests)
+                traj["final_status"] = "PASS"
+                traj["test_conservation"] = "skipped_empty_pre_pass"
+            else:
+                ok, regressed = check_test_conservation(pre_passed, post_passed)
+                if ok:
+                    traj["final_status"] = "PASS"
+                    traj["test_conservation"] = "OK"
+                else:
+                    traj["final_status"] = "FAIL_at_test_conservation"
+                    traj["test_conservation"] = "REGRESSED"
+                    traj["regressed_tests"] = [f"{c}.{n}" for c, n in regressed[:50]]
+                    traj["regressed_count"] = len(regressed)
+        else:
+            traj["final_status"] = (
+                "PASS" if compile_pass
+                else "FAIL_at_" + (last.get("step", "?") if last else "no_steps")
+            )
     finally:
         for d in (work, recipes_dir, logs):
             shutil.rmtree(d, ignore_errors=True)
@@ -397,7 +439,7 @@ def _history_to_fakes(history_lite):
     return out
 
 
-def iterate_one(stage, max_attempts=10):
+def iterate_one(stage, max_attempts=10, test_conservation=False):
     """Run iterator on one stage, up to max_attempts TOTAL (resumes from cached state)."""
     slug = f"{stage['repo'].replace('/', '_')}__J{stage['jv_from']}toJ{stage['jv_to']}"
     out_dir = f"{OUT_DIR}/{slug}"
@@ -433,7 +475,7 @@ def iterate_one(stage, max_attempts=10):
         attempt_t0 = time.time()
         chain_brief = " -> ".join(st[0] for st in chain)
         print(f"[{slug}] === attempt {attempt}/{max_attempts} ===\n[{slug}]   chain: {chain_brief}", flush=True)
-        traj = run_chain(stage, chain)
+        traj = run_chain(stage, chain, test_conservation=test_conservation)
         wall_s = round(time.time() - attempt_t0, 1)
         verdict = traj.get("final_status", "?")
         print(f"[{slug}]   verdict: {verdict}  (wall_s={wall_s})", flush=True)
@@ -505,6 +547,8 @@ def main():
     ap.add_argument("--jv-to", type=int, default=21)
     ap.add_argument("--max-attempts", type=int, default=10)
     ap.add_argument("--workers", type=int, default=1)
+    ap.add_argument("--test-conservation", action="store_true",
+                    help="ff #8: also enforce that tests passing pre-recipe still pass post-recipe")
     args = ap.parse_args()
 
     if args.repo:
@@ -518,7 +562,7 @@ def main():
     print(f"== iterating {len(stages)} stages, max_attempts={args.max_attempts}, workers={args.workers} ==", flush=True)
     done = [0]; lock = threading.Lock()
     def go(s):
-        try: r = iterate_one(s, max_attempts=args.max_attempts)
+        try: r = iterate_one(s, max_attempts=args.max_attempts, test_conservation=args.test_conservation)
         except Exception as e:
             r = {"final_verdict": f"EXC:{type(e).__name__}:{e}"}
             print(f"[{s['repo']}] EXCEPTION: {type(e).__name__}: {e}", flush=True)
