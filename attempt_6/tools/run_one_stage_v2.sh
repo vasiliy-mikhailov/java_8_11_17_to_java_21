@@ -67,8 +67,8 @@ case "$PHASE" in
     ;;
   recipe)
     : "${STAGE_RECIPE:?}"
-    PLUGIN=org.openrewrite.maven:rewrite-maven-plugin:6.12.0
-    COORDS=org.openrewrite.recipe:rewrite-migrate-java:3.12.0,org.openrewrite.recipe:rewrite-spring:6.9.0,org.openrewrite.recipe:rewrite-testing-frameworks:3.11.0,org.openrewrite.recipe:rewrite-hibernate:2.9.0
+    PLUGIN=org.openrewrite.maven:rewrite-maven-plugin:6.40.0
+    COORDS=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,org.openrewrite.recipe:rewrite-spring:6.31.0,org.openrewrite.recipe:rewrite-testing-frameworks:3.36.0,org.openrewrite.recipe:rewrite-hibernate:2.20.3
     recipe_name=$(grep -E '^name:' "$STAGE_RECIPE" | head -1 | awk '{print $2}')
     if [ "$BUILD_TOOL" = "maven" ]; then
       mvn $MVN_FLAGS -U "$PLUGIN:run" \
