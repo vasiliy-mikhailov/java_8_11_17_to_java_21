@@ -62,7 +62,6 @@ Your job: given the CURRENT chain that just failed, the FAILURE LOG, and a COMPA
 
 Allowed primitives (full FQN; either a bare string or a mapping with parameters):
   org.openrewrite.maven.UpgradeDependencyVersion (groupId, artifactId, newVersion)
-  org.openrewrite.maven.UpgradeManagedDependencyVersion (groupId, artifactId, newVersion)
   org.openrewrite.maven.ChangePropertyValue (key, newValue)
   org.openrewrite.maven.AddProperty (key, value)
   org.openrewrite.maven.UpgradeParentVersion (groupId, artifactId, newVersion)
@@ -89,6 +88,29 @@ Allowed primitives (full FQN; either a bare string or a mapping with parameters)
   org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_2
   org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_3
   org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_4
+  org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_5
+  org.openrewrite.java.spring.boot3.SpringBoot3BestPractices
+  org.openrewrite.java.spring.framework.UpgradeSpringFramework_6_1
+  org.openrewrite.java.migrate.jakarta.JakartaEE10
+  org.openrewrite.java.migrate.jakarta.JavaxMigrationToJakarta
+  org.openrewrite.java.migrate.jakarta.JavaxServletMigrationToJakartaServlet
+  org.openrewrite.java.migrate.jakarta.JavaxValidationMigrationToJakartaValidation
+  org.openrewrite.java.migrate.jakarta.JavaxXmlBindMigrationToJakartaXmlBind
+  org.openrewrite.hibernate.MigrateToHibernate61
+  org.openrewrite.hibernate.MigrateToHibernate62
+  org.openrewrite.hibernate.MigrateToHibernate66
+  org.openrewrite.java.testing.junit5.JUnit4to5Migration
+  org.openrewrite.java.testing.mockito.MockitoBestPractices
+  org.openrewrite.java.testing.mockito.Mockito1to3Migration
+  org.openrewrite.java.testing.mockito.Mockito3to4Migration
+  org.openrewrite.java.testing.assertj.JUnitToAssertj
+  org.openrewrite.java.migrate.jackson.UpgradeJacksonVersion_2_x
+  org.openrewrite.java.migrate.lombok.LombokBestPractices
+  org.openrewrite.java.migrate.lang.UseTextBlocks
+  org.openrewrite.java.migrate.lang.StringFormatted
+  org.openrewrite.java.migrate.lang.var.UseVarKeyword
+  org.openrewrite.java.RemoveUnusedImports
+  org.openrewrite.java.OrderImports
 
 Mutation strategies you may apply:
   - ADD a property/dependency bump before a build-bump step (most common fix).
