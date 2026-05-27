@@ -29,8 +29,12 @@ Examples:
     GITLAB_URL=https://gitlab.example.com GITLAB_TOKEN=glpat-...  \
         triage_gitlab.py --group my-org/backend --output-dir ./triage
 
-    # Quick sample (first 5 projects in a group)
-    triage_gitlab.py --group 1234 --output-dir ./triage --limit 5
+    # Authenticated, every project the user is a member of (across all groups)
+    GITLAB_URL=https://gitlab.example.com GITLAB_TOKEN=glpat-...  \
+        triage_gitlab.py --all --output-dir ./triage
+
+    # Quick sample (first 5 projects)
+    triage_gitlab.py --all --output-dir ./triage --limit 5
 
 Resume: re-running on the same --output-dir skips projects whose triage
 JSON is already present. Pass --no-resume to force re-triage.
@@ -136,18 +140,28 @@ class GitLab:
     def list_group_projects(self, group):
         '''Return all projects in a group, including subgroups. Paginated.'''
         gid = quote(str(group), safe='')
-        projects, page = [], 1
+        return self._paginate(f'/groups/{gid}/projects',
+                              include_subgroups='true', archived='false', simple='false')
+
+    def list_all_accessible_projects(self):
+        '''Return every project the authenticated user has access to as a member
+        (direct or via group membership). Requires a token; otherwise GitLab
+        returns only public projects, which is unbounded on gitlab.com.'''
+        return self._paginate('/projects',
+                              membership='true', archived='false', simple='false',
+                              order_by='last_activity_at', sort='desc')
+
+    def _paginate(self, path, **params):
+        out, page = [], 1
         while True:
-            r = self._get(f'/groups/{gid}/projects',
-                          include_subgroups='true', per_page=100, page=page,
-                          archived='false', simple='false')
+            r = self._get(path, per_page=100, page=page, **params)
             batch = r.json()
             if not batch: break
-            projects.extend(batch)
+            out.extend(batch)
             if 'next' not in r.headers.get('Link', ''): break
             page += 1
             time.sleep(0.2)
-        return projects
+        return out
 
     def download_archive(self, project_id, ref, dst_path):
         '''Download project archive (tar.gz) to dst_path.'''
@@ -365,7 +379,8 @@ def main():
                                  description=__doc__)
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument('--group', help='GitLab group ID or path (e.g. "my-org/backend") — discovers all projects in the group + subgroups')
-    src.add_argument('--projects', help='Comma-separated list of project IDs to triage directly (alternative to --group)')
+    src.add_argument('--projects', help='Comma-separated list of project IDs to triage directly')
+    src.add_argument('--all', action='store_true', help='Triage every project the authenticated user is a member of (direct or via group). REQUIRES GITLAB_TOKEN. Use --limit to cap.')
     ap.add_argument('--output-dir', default='./triage', help='Where to write per-project JSON')
     ap.add_argument('--limit', type=int, default=0, help='Triage only the first N projects (0 = all)')
     ap.add_argument('--resume', action='store_true', default=True, help='Skip projects with existing JSON (default)')
@@ -393,6 +408,13 @@ def main():
                 projects.append(p)
             except Exception as e:
                 print(f'   id={pid}: ERROR {type(e).__name__}: {e}', flush=True)
+    elif args.all:
+        if not token:
+            print('error: --all requires GITLAB_TOKEN (otherwise listing would be unbounded public-projects)', file=sys.stderr)
+            return 2
+        print(f'== discovering all projects accessible to authenticated user ==', flush=True)
+        projects = gl.list_all_accessible_projects()
+        print(f'   found {len(projects)} project(s)', flush=True)
     else:
         print(f'== discovering projects in group {args.group} ==', flush=True)
         projects = gl.list_group_projects(args.group)
