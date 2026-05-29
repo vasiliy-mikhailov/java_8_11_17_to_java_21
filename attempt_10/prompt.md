@@ -1,53 +1,35 @@
-# Dominanta — Java 17 → Java 21 LTS bump
+# Dominanta — Java LTS bump (one step: jv_from → next LTS)
 
 ## Purpose
-This project builds and passes tests under Java 17. Bump it to Java 21 so the same project builds and the same tests still pass.
+This project builds and passes tests under Java `jv_from` (8, 11, or 17). Bump it to the next Java LTS (`jv_to` = 11, 17, or 21 respectively) so the same project builds and the same tests still pass.
 
 ## Contract and constraints
-Action vocabulary: `git` (init, add, commit, reset --hard, status, diff), `mvn rewrite:run -Drewrite.activeRecipes=<FQN>` (recipes only from the catalog below), `mvn compile`, `mvn test`, and direct edits to `pom.xml` only when a scripted-fix trigger matches verbatim. No other edits. No source changes you author yourself.
+Action vocabulary: `git` (init, add, commit, reset --hard, status, diff), the **shipped bump script** for this stage's bump (`bump_<jv_from>_to_<jv_to>.sh <workdir>`), `mvn compile`, `mvn test`, and direct edits to `pom.xml` only when a scripted-fix trigger matches verbatim. No other edits. No source changes you author yourself.
 
-**Environment.** Java toolchains and Maven are reachable only through the `mvn` command on your PATH (dispatches to a docker container providing JDK 8/11/17/21 and Maven 3.9). The `java` / `javac` binaries are not directly installed — do not run them directly and do not attempt to install JDK or Maven. `mvn -version` is the toolchain probe. Switch JDK per step with `JDK=<n> mvn …` (e.g. `JDK=21 mvn compile`).
+**Environment.** Java toolchains and Maven are reachable only through the `mvn` command on your PATH (dispatches to a docker container providing JDK 8/11/17/21 and Maven 3.9). Bump scripts are on your PATH as `bump_<from>_to_<to>.sh`. `java`/`javac` binaries are not directly installed; do not attempt to install them. Switch JDK per command with `JDK=<n>` (e.g. `JDK=21 mvn test`).
 
-Recipe coordinates on every `mvn rewrite:run`:
-```
--Drewrite.recipeArtifactCoordinates=\
-org.openrewrite.recipe:rewrite-migrate-java:3.35.0,\
-com.claude.recipes:claude-recipes:1.0.0
-```
-Plugin pin: `org.openrewrite.maven:rewrite-maven-plugin:6.40.0`.
+## Search hints
 
-## Search hints — what observed failures have taught
-
-- **git as checkpoint.** Before anything else, `git init && git add -A && git commit -m baseline`, then `JDK=17 mvn test` to record the passing-test set (`BASELINE_PASS`). Every recipe applied later is a candidate commit; if it regresses tests vs `BASELINE_PASS`, `git reset --hard HEAD` and try the next.
-- **Test counts come from surefire XML, not stdout.** Parse `target/surefire-reports/TEST-<classname>.xml` files (one per test class; each has a `<testsuite>` root element with `tests`, `failures`, `errors`, `skipped` attributes and one `<testcase>` per method). For multi-module projects, glob `**/target/surefire-reports/TEST-*.xml` recursively. Do not grep mvn stdout for "Tests run:" — surefire XML is the canonical source. Clear `target/surefire-reports/` between pre and post test runs.
-- **Three recipes in fixed order.** The chain for 17→21 is short: (1) `upgrade_plugins_for_java21` under JDK 17, (2) `upgrade_build_to_java21` under JDK 21, (3) `java21_transforms` under JDK 21. After each: `mvn compile` then `mvn test`, commit if both pass, otherwise reset.
-- **Scripted fixes are direct `pom.xml` edits via your file_editor tool.** They are NOT recipes — do not try to express them via `mvn rewrite:run`. When a build error matches a trigger in the "Scripted fixes" table, open `pom.xml` and make the listed change directly, then re-build.
-- **A failed step is informative, not fatal.** When a step regresses or won't compile, `git reset --hard HEAD` and move to the next recipe. The chain converges over multiple steps; do not loop on one step more than twice.
+- **The happy path is one shell command.** The bump script is pre-tested by the operator; calling it correctly applies the canonical recipe sequence for this jump. Do NOT re-derive the recipe sequence; do NOT call `mvn rewrite:run` directly.
+- **Loop discipline.**
+  1. `git init && git add -A && git commit -m baseline`.
+  2. `JDK=<jv_from> mvn test` → record `BASELINE_PASS` from `target/surefire-reports/TEST-*.xml`.
+  3. `bump_<jv_from>_to_<jv_to>.sh .` → rc=0 expected.
+  4. `JDK=<jv_to> mvn compile` → rc=0 expected.
+  5. `JDK=<jv_to> mvn test` → parse surefire; if every test in `BASELINE_PASS` still passes, `git commit -am bump` and **stop, you are done**.
+- **Test counts come from surefire XML.** Parse `**/target/surefire-reports/TEST-<classname>.xml` recursively; each XML has a `<testsuite>` root with `tests`, `failures`, `errors`, `skipped` attributes. Clear `target/surefire-reports/` between pre and post runs. Do not grep mvn stdout for "Tests run:".
+- **Recovery only on real failure.** If step 3, 4 or 5 fails, read the `[ERROR]` block. If it matches a "Scripted fixes" trigger, apply the listed pom edit via your file_editor, `git commit`, re-run from the failed step. If no trigger matches, bail.
 
 ## Reward
-`JDK=21 mvn compile` succeeds AND every test in `BASELINE_PASS` passes `JDK=21 mvn test`. The diff vs initial commit is the deliverable.
+`JDK=<jv_to> mvn compile` succeeds AND every test in `BASELINE_PASS` passes `JDK=<jv_to> mvn test`. The diff vs initial commit is the deliverable.
 
-## Repeat
-Cycle through the three recipes under the discipline above until reward is approached. On exhaustion without success, state the last failing recipe + `[ERROR]` block and stop.
-
----
-
-## Recipe catalog (3 steps, in order)
-
-| # | Label | JDK | Recipe FQN |
-|---|---|---|---|
-| 1 | upgrade_plugins_for_java21 | 17 | `org.openrewrite.java.migrate.UpgradePluginsForJava21` |
-| 2 | upgrade_build_to_java21 | 21 | `org.openrewrite.java.migrate.UpgradeBuildToJava21` |
-| 3 | java21_transforms | 21 | comma-separated: `org.openrewrite.java.migrate.RemoveIllegalSemicolons,org.openrewrite.java.migrate.lang.ThreadStopUnsupported,org.openrewrite.java.migrate.net.URLConstructorToURICreate,org.openrewrite.java.migrate.util.SequencedCollection,org.openrewrite.java.migrate.util.UseLocaleOf,org.openrewrite.staticanalysis.ReplaceDeprecatedRuntimeExecMethods,org.openrewrite.java.migrate.DeleteDeprecatedFinalize,org.openrewrite.java.migrate.RemovedSubjectMethods` |
-
-## Custom claude-recipes (invoke as recipes when source pattern matches)
-
-| Source pattern | Recipe FQN |
-|---|---|
-| `HttpStatus` returned where Spring 6 expects `HttpStatusCode` | `com.claude.recipes.WidenHttpStatusToHttpStatusCode` |
-
-## Scripted fixes (direct pom.xml edits via file_editor; apply ONLY when the trigger string appears in the most recent `[ERROR]` block)
+## Scripted fixes (direct pom.xml edits, apply only on matching `[ERROR]`)
 
 | `[ERROR]` trigger | Exact pom.xml edit |
 |---|---|
+| `Could not find artifact org.liquibase.ext:liquibase-hibernate5` | Replace every `<artifactId>liquibase-hibernate5</artifactId>` with `<artifactId>liquibase-hibernate6</artifactId>`; set `<liquibase.version>4.27.0</liquibase.version>`. |
 | `Could not resolve [...] htmlunit:jar:2.6` | Set `net.sourceforge.htmlunit:htmlunit` version to `2.70.0`. |
+| `Could not find artifact org.springdoc:springdoc-openapi-ui` | Replace `<artifactId>springdoc-openapi-ui</artifactId>` with `<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>` and set version `2.3.0`. |
+
+## When to bail
+If after running the bump script + applying matching scripted fixes the build still won't compile or tests still regress vs `BASELINE_PASS`, state which step failed and the unresolved `[ERROR]`. Do not invent edits.
