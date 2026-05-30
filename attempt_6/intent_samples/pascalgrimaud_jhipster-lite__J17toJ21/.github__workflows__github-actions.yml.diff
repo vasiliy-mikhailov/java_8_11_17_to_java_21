@@ -1,0 +1,380 @@
+diff --git a/.github/workflows/github-actions.yml b/.github/workflows/github-actions.yml
+index 95b94a2fd0..ffc7062350 100644
+--- a/.github/workflows/github-actions.yml
++++ b/.github/workflows/github-actions.yml
+@@ -1,47 +1,343 @@
+ name: build
+-on: [push, pull_request]
++concurrency:
++  group: ${{ github.workflow }}-${{ github.head_ref || (github.ref == 'refs/heads/main' && github.sha) || github.ref }}
++  cancel-in-progress: true
++on:
++  workflow_dispatch:
++  push:
++    branches:
++      - main
++  pull_request:
++    branches:
++      - main
+ jobs:
+-  pipeline:
+-    name: jhforge pipeline
++  #--------------------------------------------------
++  # Build and Tests the project on Windows
++  #--------------------------------------------------
++  tests-windows:
++    name: tests-windows
++    runs-on: windows-latest
++    timeout-minutes: 20
++    steps:
++      - name: 'Setup: checkout project'
++        uses: actions/checkout@v4
++      - name: 'Setup: environment'
++        id: setup
++        uses: ./.github/actions/setup
++      - name: 'Init: cache local Maven repository'
++        uses: actions/cache@v3
++        with:
++          path: ~/.m2/repository
++          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
++          restore-keys: |
++            ${{ runner.os }}-maven-
++      - name: 'Init: install Node.js packages'
++        run: npm ci
++      - name: 'Test: run backend tests'
++        run: |
++          ./mvnw clean verify
++  #--------------------------------------------------
++  # Build and Tests the project on Linux
++  #--------------------------------------------------
++  tests-linux:
++    name: tests-linux
+     runs-on: ubuntu-latest
+-    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]')"
+-    timeout-minutes: 40
++    timeout-minutes: 20
++    if: >-
++      !contains(github.event.head_commit.message, '[ci skip]') &&
++      !contains(github.event.head_commit.message, '[skip ci]') &&
++      !contains(github.event.pull_request.title, '[skip ci]') &&
++      !contains(github.event.pull_request.title, '[ci skip]')
+     steps:
+-      - uses: actions/checkout@v2
+-      - name: 'Setup: Node.js'
+-        uses: actions/setup-node@v1
+-        with:
+-          node-version: 14.17.1
+-      - name: 'Setup: update npm'
+-        run: npm install -g npm
+-      - name: 'Setup: Java'
+-        uses: actions/setup-java@v2
+-        with:
+-          distribution: 'adopt'
+-          java-version: '11.x'
+-      - name: 'Setup: check tools'
+-        run: |
+-          node -v
+-          npm -v
+-          java -version
++      - name: 'Setup: checkout project'
++        uses: actions/checkout@v4
++        with:
++          fetch-depth: 0
++      - name: 'Setup: environment'
++        id: setup
++        uses: ./.github/actions/setup
+       - name: 'Init: cache local Maven repository'
+-        uses: actions/cache@v2
++        uses: actions/cache@v3
+         with:
+           path: ~/.m2/repository
+           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+           restore-keys: |
+             ${{ runner.os }}-maven-
++      - name: 'Start local Sonar'
++        run: docker-compose -f src/main/docker/sonar.yml up -d
+       - name: 'Init: install Node.js packages'
+-        run: npm install
+-      - name: 'Check: prettier'
+-        run: npm run prettier:check
++        run: npm ci
++      - name: 'Lint: check'
++        run: npm run lint:ci
++      - name: 'TEMP: enable gradle build tool slug'
++        run: sed -i '/- gradle-java/d' src/main/resources/config/application.yml
+       - name: 'Test: run backend tests'
+         run: |
+           chmod +x mvnw
+-          ./mvnw clean verify
+-      - uses: codecov/codecov-action@v2
++          ./mvnw clean verify -Dsonar.qualitygate.wait=true sonar:sonar
++      - name: 'Analysis: local Sonar'
++        run: |
++          ./tests-ci/sonar.sh
++      - name: 'Analysis: SonarCloud'
++        if: github.repository == 'jhipster/jhipster-lite' && github.ref == 'refs/heads/main'
++        env:
++          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
++          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
++        run: ./mvnw initialize sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.projectKey=jhipster_jhipster-lite -Dsonar.organization=jhipster -Dsonar.login= -Dsonar.password=
++      - name: 'Artifact: upload JaCoCo report'
++        uses: actions/upload-artifact@v3
++        with:
++          name: jacoco
++          path: '${{ github.workspace }}/target/jacoco/jacoco.xml'
++          retention-days: 1
++      - name: 'Artifact: upload lcov report'
++        uses: actions/upload-artifact@v3
++        with:
++          name: lcov
++          path: '${{ github.workspace }}/target/test-results/lcov.info'
++          retention-days: 1
++      - name: 'Artifact: upload JAR'
++        uses: actions/upload-artifact@v3
++        with:
++          name: jhlite-jar
++          path: '${{ github.workspace }}/target/*.jar'
++          retention-days: 1
++  #--------------------------------------------------
++  # Cypress
++  #--------------------------------------------------
++  cypress:
++    needs: [tests-linux]
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    steps:
++      - name: 'Setup: checkout project'
++        uses: actions/checkout@v4
++      - name: 'Setup: environment'
++        id: setup
++        uses: ./.github/actions/setup
++      - name: 'Artifact: download JAR'
++        uses: actions/download-artifact@v3
+         with:
+-          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+-          files: ./target/jacoco/jacoco.xml
+-          fail_ci_if_error: true # optional (default = false)
+-          verbose: true # optional (
++          name: jhlite-jar
++          path: ./tests-ci/
++      - name: 'Init: install Node.js packages'
++        run: npm ci
++      - name: 'Test: start application JHipster Lite'
++        working-directory: ./tests-ci/
++        run: |
++          ./start.sh 7471
++      - name: 'Test: launch Cypress'
++        run: npm run e2e:headless
++
++  #--------------------------------------------------
++  # Tests generated projects
++  #--------------------------------------------------
++  generation:
++    needs: [tests-linux]
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    if: >-
++      !contains(github.event.head_commit.message, '[ci skip]') &&
++      !contains(github.event.head_commit.message, '[skip ci]') &&
++      !contains(github.event.pull_request.title, '[skip ci]') &&
++      !contains(github.event.pull_request.title, '[ci skip]')
++    strategy:
++      matrix:
++        app:
++          - fullapp
++          - oauth2app
++          - mysqlapp
++          - mariadbapp
++          - mssqlapp
++          - flywayapp
++          - undertowapp
++          - eurekaapp
++          - consulapp
++          - gatewayapp
++          - mongodbapp
++          - redisapp
++          - cassandraapp
++          - neo4japp
++          - angularapp
++          - reactapp
++          - vueapp
++          - kafkaapp
++          - pulsarapp
++          - reactiveapp
++          - angularoauth2app
++          - customjhlite
++          - typescriptapp
++          - gradleapp
++        include:
++          - java-version: 17
++            spring-config-format: yaml
++          - java-version: 21
++            app: fullapp
++          - java-version: 21
++            app: customjhlite
++            spring-config-format: properties
++    steps:
++      - name: 'Setup: checkout project'
++        uses: actions/checkout@v4
++      - name: 'Setup: environment'
++        id: setup
++        uses: ./.github/actions/setup
++      - name: 'Artifact: download JAR'
++        uses: actions/download-artifact@v3
++        with:
++          name: jhlite-jar
++          path: ./tests-ci/
++      - name: 'Generation: generate ${{ matrix.app }}'
++        working-directory: ./tests-ci/
++        run: |
++          ./start.sh 7471
++          ./generate.sh ${{ matrix.app }} ${{ matrix.spring-config-format }}
++          ./stop.sh
++      - name: 'Generation: display md5sum ${{ matrix.app }}'
++        working-directory: /tmp/jhlite/${{ matrix.app }}/
++        run: |
++          app_md5=$(find . \
++            -not -path './.git/*' \
++            -not -path './.jhipster/*' \
++            -not -path './node_modules/*' \
++            -not -path './target/*' \
++            -not -path './build/*' \
++            -type f -exec md5sum {} + | LC_ALL=C sort | md5sum | head -n1 | cut -d " " -f1)
++          echo $app_md5
++      - name: 'Test: list ${{ matrix.app }}'
++        id: cache_md5sum
++        run: |
++          ls -al /tmp/jhlite/${{ matrix.app }}
++          MD5SUM_POM_XML=$(md5sum /tmp/jhlite/${{ matrix.app }}/pom.xml | cut -d ' ' -f 1)
++          echo $MD5SUM_POM_XML
++          echo "md5sum_pom_xml=${MD5SUM_POM_XML}" >> $GITHUB_OUTPUT
++      - name: 'Init: cache local Maven repository'
++        uses: actions/cache@v3
++        with:
++          path: ~/.m2/repository
++          key: ${{ runner.os }}-maven-${{ matrix.app }}-${{ steps.cache_md5sum.outputs.md5sum_pom_xml }}
++          restore-keys: |
++            ${{ runner.os }}-maven-
++      - name: 'Test: starting Sonar'
++        working-directory: /tmp/jhlite/${{ matrix.app }}/
++        run: |
++          if [ -f 'src/main/docker/sonar.yml' ]; then
++            docker-compose -f src/main/docker/sonar.yml up -d
++            ${{ github.workspace }}/tests-ci/wait_sonar.sh
++            docker ps -a
++          fi
++      - name: 'Setup: java version ${{ matrix.java-version }} for generated application'
++        uses: actions/setup-java@v3
++        with:
++          distribution: 'temurin'
++          java-version: ${{ matrix.java-version }}
++      - name: 'Test: verify ${{ matrix.app }}'
++        working-directory: /tmp/jhlite/${{ matrix.app }}/
++        run: |
++          if [ -f 'mvnw' ]; then
++            ./mvnw clean verify -Dsonar.qualitygate.wait=true sonar:sonar
++          elif [ -f 'gradlew' ]; then
++            ./gradlew build --no-daemon
++          else
++            npm install
++            npm test
++          fi
++      - name: 'Test: check local Sonar Analysis'
++        run: |
++          if [ -f '/tmp/jhlite/${{ matrix.app }}/src/main/docker/sonar.yml' ]; then
++            ./tests-ci/sonar.sh ${{ matrix.app }}
++          fi
++      - name: 'Test: copy shell scripts'
++        run: cp ./tests-ci/start.sh /tmp/jhlite/${{ matrix.app }}/
++      - name: 'Test: start docker compose services'
++        working-directory: ./tests-ci/
++        run: |
++          ./start_docker_compose.sh /tmp/jhlite/${{ matrix.app }}/
++      - name: 'Test: start the application'
++        working-directory: /tmp/jhlite/${{ matrix.app }}/
++        run: |
++          # TODO: add also 'gradlew' once gradle support is more advanced
++          if [ -f 'mvnw' ]; then
++            ./start.sh
++          fi
++
++  #--------------------------------------------------
++  # Send analysis to Codecov
++  #--------------------------------------------------
++  codecov:
++    needs: cypress
++    name: codecov
++    if: >-
++      github.repository == 'jhipster/jhipster-lite' &&
++      !contains(github.event.head_commit.message, '[ci skip]') &&
++      !contains(github.event.head_commit.message, '[skip ci]') &&
++      !contains(github.event.pull_request.title, '[skip ci]') &&
++      !contains(github.event.pull_request.title, '[ci skip]')
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      - name: 'Setup: checkout project'
++        uses: actions/checkout@v4
++      - name: 'Artifact: download JaCoCo report'
++        uses: actions/download-artifact@v3
++        with:
++          name: jacoco
++      - name: 'Artifact: download lcov report'
++        uses: actions/download-artifact@v3
++        with:
++          name: lcov
++      - name: 'Codecov: sending JaCoCo analysis...'
++        uses: codecov/codecov-action@v3
++        with:
++          files: jacoco.xml
++          fail_ci_if_error: true
++          verbose: true
++      - name: 'Codecov: sending lcov analysis...'
++        uses: codecov/codecov-action@v3
++        with:
++          files: lcov.info
++          fail_ci_if_error: true
++          verbose: true
++
++  #--------------------------------------------------
++  # Configuration for Status checks that are required
++  #--------------------------------------------------
++  status-checks:
++    name: status-checks
++    needs: [tests-linux, codecov, generation]
++    permissions:
++      contents: none
++    if: always()
++    runs-on: ubuntu-latest
++    timeout-minutes: 5
++    steps:
++      - name: Validation Status checks
++        run: |
++          echo 'Configuration for Status checks that are required'
++          echo '${{ toJSON(needs) }}'
++          if [[ (('skipped' == '${{ needs.tests-linux.result }}') || ('success' == '${{ needs.tests-linux.result }}')) && (('skipped' == '${{ needs.codecov.result }}') || ('success' == '${{ needs.codecov.result }}')) && (('skipped' == '${{ needs.generation.result }}') || ('success' == '${{ needs.generation.result }}')) ]]; then
++            exit 0
++          fi
++          exit 1
++
++  #--------------------------------------------------
++  # Dependabot auto merge PR
++  #--------------------------------------------------
++  dependabot-auto-merge:
++    name: dependabot-auto-merge
++    needs: [cypress, generation]
++    permissions:
++      pull-requests: write
++      contents: write
++    runs-on: ubuntu-latest
++    if: ${{ github.repository == 'jhipster/jhipster-lite' && github.ref != 'refs/heads/main' && github.event.pull_request.user.login == 'dependabot[bot]' }}
++    steps:
++      - name: Dependabot metadata
++        id: dependabot-metadata
++        uses: dependabot/fetch-metadata@v1.6.0
++      - name: Enable auto-merge for Dependabot PRs
++        if: ${{ steps.dependabot-metadata.outputs.update-type != 'version-update:semver-major' }}
++        run: gh pr merge --auto --merge "$PR_URL"
++        env:
++          PR_URL: ${{ github.event.pull_request.html_url }}
++          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

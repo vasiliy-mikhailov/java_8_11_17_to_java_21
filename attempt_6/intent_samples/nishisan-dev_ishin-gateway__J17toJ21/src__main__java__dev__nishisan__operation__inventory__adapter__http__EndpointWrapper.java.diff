@@ -1,0 +1,156 @@
+diff --git a/src/main/java/dev/nishisan/operation/inventory/adapter/http/EndpointWrapper.java b/src/main/java/dev/nishisan/operation/inventory/adapter/http/EndpointWrapper.java
+index fc22ccf..fb1b1a7 100644
+--- a/src/main/java/dev/nishisan/operation/inventory/adapter/http/EndpointWrapper.java
++++ b/src/main/java/dev/nishisan/operation/inventory/adapter/http/EndpointWrapper.java
+@@ -16,7 +16,11 @@
+  */
+ package dev.nishisan.operation.inventory.adapter.http;
+ 
++import brave.Span;
+ import brave.Tracer;
++import brave.Tracing;
++import brave.propagation.TraceContext;
++import brave.propagation.TraceContextOrSamplingFlags;
+ import dev.nishisan.operation.inventory.adapter.auth.IAuthUserPrincipal;
+ import dev.nishisan.operation.inventory.adapter.auth.ITokenDecoder;
+ import dev.nishisan.operation.inventory.adapter.auth.OAuthClientManager;
+@@ -34,6 +38,7 @@ import groovy.util.ResourceException;
+ import groovy.util.ScriptException;
+ import io.javalin.Javalin;
+ import io.javalin.http.HandlerType;
++import jakarta.servlet.http.HttpServletRequest;
+ import java.lang.reflect.Constructor;
+ import java.lang.reflect.InvocationTargetException;
+ import java.net.MalformedURLException;
+@@ -84,9 +89,14 @@ public class EndpointWrapper {
+         this.proxyManager.init();
+         try {
+             logger.debug("Getting Tracer Method");
+-            Tracer tracer = tracerService.getTracing(name);
++            Tracing tracing = tracerService.getTracingInstance(name);
++            Tracer tracer = tracing.tracer();
+ 
+-            logger.debug("Tracer OK");
++            // Extractor para propagar contexto B3 a partir dos headers HTTP de entrada
++            TraceContext.Extractor<HttpServletRequest> extractor = tracing.propagation()
++                    .extractor(HttpServletRequest::getHeader);
++
++            logger.debug("Tracer OK with B3 propagation support");
+ 
+             Map<String, HandlerType> methodMapping = Map.of(
+                     "GET", HandlerType.GET,
+@@ -109,17 +119,37 @@ public class EndpointWrapper {
+ 
+                         listener.addHttpHandler(handlerType, urlContext.getContext(), ctx -> {
+                             logger.debug("---------------------------------------------------------------------");
+-                            TracerWrapper traceWrapper = new TracerWrapper(tracer);
++                            TracerWrapper traceWrapper = new TracerWrapper(tracer, tracing);
+                             CustomContextWrapper customCtx = new CustomContextWrapper(ctx, contextName, urlContext, traceWrapper);
+ 
+-                            SpanWrapper rootSpan = traceWrapper.createSpan(urlContext.getMethod().toLowerCase() + "-handler-[" + contextName + "]");
++                            // Extrai contexto B3 da request de entrada (se presente)
++                            SpanWrapper rootSpan = createServerSpan(traceWrapper, tracer, extractor, ctx.req(),
++                                    urlContext.getMethod().toLowerCase() + "-handler-[" + contextName + "]");
++
++                            // Tags HTTP semânticas — request inbound
++                            rootSpan.tag("url-context", urlContext.getContext());
++                            rootSpan.tag("http-method", urlContext.getMethod());
++                            rootSpan.tag("http.method", ctx.method().name());
++                            rootSpan.tag("http.url", ctx.fullUrl());
++                            rootSpan.tag("http.path", ctx.path());
++                            if (ctx.queryString() != null) {
++                                rootSpan.tag("http.query", ctx.queryString());
++                            }
++                            rootSpan.tag("http.client_ip", ctx.ip());
++                            if (ctx.userAgent() != null) {
++                                rootSpan.tag("http.user_agent", ctx.userAgent());
++                            }
++                            if (ctx.contentType() != null) {
++                                rootSpan.tag("http.request.content_type", ctx.contentType());
++                            }
++                            if (ctx.contentLength() > 0) {
++                                rootSpan.tag("http.request.content_length", ctx.contentLength());
++                            }
+ 
+                             try {
+                                 if (listenerConfig.getSecured()) {
+                                     if (urlContext.getSecured()) {
+                                         SpanWrapper securedPan = traceWrapper.createSpan(urlContext.getMethod().toLowerCase() + "-handler-secured-[" + contextName + "]");
+-                                        rootSpan.tag("url-context", urlContext.getContext());
+-                                        rootSpan.tag("http-method", urlContext.getMethod());
+                                         try {
+                                             IAuthUserPrincipal userPrincipal = getTokenDecoder(listenerConfig.getSecureProvider(), traceWrapper).decodeToken(customCtx);
+                                             if (userPrincipal == null) {
+@@ -163,6 +193,8 @@ public class EndpointWrapper {
+                                     this.proxyManager.handleRequest(name, customCtx);
+                                 }
+                             } finally {
++                                rootSpan.tag("http.status_code", ctx.statusCode());
++                                ctx.header("x-trace-id", traceWrapper.getTraceId());
+                                 rootSpan.finish();
+                             }
+                         });
+@@ -171,12 +203,32 @@ public class EndpointWrapper {
+                         methodMapping.values().forEach(type
+                                 -> listener.addHttpHandler(type, urlContext.getContext(), ctx -> {
+                                     logger.debug("---------------------------------------------------------------------");
+-                                    TracerWrapper traceWrapper = new TracerWrapper(tracer);
++                                    TracerWrapper traceWrapper = new TracerWrapper(tracer, tracing);
+                                     CustomContextWrapper customCtx = new CustomContextWrapper(ctx, contextName, urlContext, traceWrapper);
+ 
+-                                    SpanWrapper rootSpan = traceWrapper.createSpan("any-handler-[" + contextName + "]");
++                                    // Extrai contexto B3 da request de entrada (se presente)
++                                    SpanWrapper rootSpan = createServerSpan(traceWrapper, tracer, extractor, ctx.req(),
++                                            "any-handler-[" + contextName + "]");
++
++                                    // Tags HTTP semânticas — request inbound (ANY handler)
+                                     rootSpan.tag("url-context", urlContext.getContext());
+                                     rootSpan.tag("http-method", urlContext.getMethod());
++                                    rootSpan.tag("http.method", ctx.method().name());
++                                    rootSpan.tag("http.url", ctx.fullUrl());
++                                    rootSpan.tag("http.path", ctx.path());
++                                    if (ctx.queryString() != null) {
++                                        rootSpan.tag("http.query", ctx.queryString());
++                                    }
++                                    rootSpan.tag("http.client_ip", ctx.ip());
++                                    if (ctx.userAgent() != null) {
++                                        rootSpan.tag("http.user_agent", ctx.userAgent());
++                                    }
++                                    if (ctx.contentType() != null) {
++                                        rootSpan.tag("http.request.content_type", ctx.contentType());
++                                    }
++                                    if (ctx.contentLength() > 0) {
++                                        rootSpan.tag("http.request.content_length", ctx.contentLength());
++                                    }
+                                     try {
+                                         if (listenerConfig.getSecured()) {
+                                             if (urlContext.getSecured()) {
+@@ -224,6 +276,8 @@ public class EndpointWrapper {
+                                             this.proxyManager.handleRequest(name, customCtx);
+                                         }
+                                     } finally {
++                                        rootSpan.tag("http.status_code", ctx.statusCode());
++                                        ctx.header("x-trace-id", traceWrapper.getTraceId());
+                                         rootSpan.finish();
+                                     }
+                                 })
+@@ -342,4 +396,19 @@ public class EndpointWrapper {
+             getTokenDecoderSpan.finish();
+         }
+     }
++
++    /**
++     * Cria um span SERVER, extraindo contexto B3 dos headers HTTP de entrada
++     * quando presente (permitindo distributed tracing entre serviços).
++     */
++    private SpanWrapper createServerSpan(TracerWrapper traceWrapper, Tracer tracer,
++            TraceContext.Extractor<HttpServletRequest> extractor, HttpServletRequest req, String spanName) {
++        TraceContextOrSamplingFlags extracted = extractor.extract(req);
++        Span braveSpan = tracer.nextSpan(extracted).name(spanName).kind(Span.Kind.SERVER);
++        braveSpan.start();
++        SpanWrapper wrapper = new SpanWrapper(spanName, braveSpan);
++        traceWrapper.addSpan(wrapper);
++        traceWrapper.setCurrentSpan(wrapper);
++        return wrapper;
++    }
+ }

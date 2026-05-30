@@ -1,0 +1,37 @@
+#!/bin/bash
+# One datapoint, full P3 rung-ladder run SEQUENTIALLY (opus -> qwen -> oh_qwen).
+# Records 3 verdict rows to feedback_p3_iter.jsonl, preserves each rung's dialogue, cleans temp trees.
+# Usage: ladder_one.sh <slug> <repo> <sha> <jv_from> <jv_to>
+set -u
+T=/home/vmihaylov/java_8_11_17_to_java_21/attempt_10
+SLUG="$1"; REPO="$2"; SHA="$3"; JF="$4"; JT="$5"
+OUT="$T/per_repo_iter/$SLUG"; mkdir -p "$OUT"
+FB="$T/feedback_p3_iter.jsonl"
+PSHA=$(cd "$T" && python3 -c "import hashlib;print(hashlib.sha256(open('prompt.md','rb').read()).hexdigest()[:12])")
+rec(){ python3 -c "import json,time;print(json.dumps({'ts':time.strftime('%Y-%m-%dT%H:%M:%S'),'stage':'$SLUG','rung':'$1','prompt_sha':'$PSHA','recipe_catalog_sha':'e9d533fecf22','outcome':'$2'}))" >> "$FB"; }
+clone(){ rm -rf "$1" 2>/dev/null; git clone -q --depth 120 "https://github.com/$REPO" "$1" && ( cd "$1" && git fetch -q --depth 240 origin "$SHA" && git checkout -q "$SHA" ); }
+
+# rung 1: opus (deterministic prompt-flow; clones own tree; writes trajectory.opus.json)
+bash "$T/tools/opus_rung.sh" "$SLUG" "$REPO" "$SHA" "$JF" "$JT" >/dev/null 2>&1
+OV=$(python3 -c "import json;print(json.load(open('$OUT/trajectory.opus.json'))['verdict'])" 2>/dev/null || echo FAIL)
+rec opus "$OV"
+
+# rung 2: qwen (Claude+Qwen agent)
+QWD=/tmp/$SLUG.qwen; clone "$QWD"
+PATH=$HOME/bin:$PATH python3 "$T/tools/middle_qwen.py" "$SLUG" "$QWD" "$JF" "$JT" >/tmp/$SLUG.qwen.out 2>&1
+QV=$(python3 -c "import json;print(json.load(open('/tmp/$SLUG.qwen.out'))['terminal']['outcome'])" 2>/dev/null || echo FAIL)
+rec qwen "$QV"
+
+# rung 3: oh_qwen (OpenHands+Qwen agent; 600s safety timeout for post-commit over-verify)
+OWD=/tmp/$SLUG.oh; clone "$OWD"
+( cd /tmp && PATH=$HOME/bin:/tmp:$PATH timeout 1500 python3 /tmp/oh_one.py "$OWD" "$SLUG" >"$OUT/dialogue.oh_qwen.log" 2>&1 )
+OHV=$(python3 -c "
+import sys,json,os; sys.path.insert(0,'$T/tools'); import d10_outer_persist as d
+pre=json.load(open('$OUT/pre.json')) if os.path.exists('$OUT/pre.json') else None
+post=d.surefire_counts('$OWD'); pom=d.pom_java_version('$OWD')
+print(d.compute_verdict(pom,int('$JT'),pre,post,'$OUT/dialogue.oh_qwen.log'))
+" 2>/dev/null || echo FAIL)
+rec oh_qwen "$OHV"
+
+docker run --rm -v /tmp:/t busybox sh -c "rm -rf /t/$SLUG.qwen /t/$SLUG.oh /t/${SLUG}_opus /t/$SLUG.qwen.out" >/dev/null 2>&1
+echo "DONE $SLUG opus=$OV qwen=$QV oh=$OHV"

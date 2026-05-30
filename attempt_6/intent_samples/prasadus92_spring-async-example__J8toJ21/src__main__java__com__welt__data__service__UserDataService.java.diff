@@ -1,0 +1,160 @@
+diff --git a/src/main/java/com/welt/data/service/UserDataService.java b/src/main/java/com/welt/data/service/UserDataService.java
+index bb57dfa..c8587ca 100644
+--- a/src/main/java/com/welt/data/service/UserDataService.java
++++ b/src/main/java/com/welt/data/service/UserDataService.java
+@@ -1,10 +1,152 @@
+ package com.welt.data.service;
+ 
+-import com.welt.data.dto.UserDataDto;
++import com.welt.data.client.JsonPlaceholderClient;
++import com.welt.data.dto.Post;
++import com.welt.data.dto.User;
++import com.welt.data.dto.UserData;
++import com.welt.data.exception.UserNotFoundException;
++import io.micrometer.core.annotation.Timed;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++import org.springframework.cache.annotation.Cacheable;
++import org.springframework.stereotype.Service;
+ import reactor.core.publisher.Mono;
+ 
+-public interface UserDataService {
++import java.util.List;
++import java.util.concurrent.CompletableFuture;
++import java.util.concurrent.CompletionException;
+ 
+-    Mono<UserDataDto> getUserData(Integer userId);
++import static com.welt.data.config.CacheConfig.USER_DATA_CACHE;
+ 
++/**
++ * Service for aggregating user data from external APIs.
++ * Provides both synchronous (async-based) and reactive interfaces.
++ */
++@Service
++public class UserDataService {
++
++    private static final Logger log = LoggerFactory.getLogger(UserDataService.class);
++
++    private final JsonPlaceholderClient apiClient;
++
++    public UserDataService(JsonPlaceholderClient apiClient) {
++        this.apiClient = apiClient;
++    }
++
++    /**
++     * Fetches aggregated user data including user details and posts.
++     * Uses parallel async execution for optimal performance.
++     *
++     * @param userId the user ID to fetch data for
++     * @return UserData containing user details and posts
++     * @throws UserNotFoundException if the user does not exist
++     */
++    @Timed(value = "service.user.data.get", description = "Time to aggregate user data")
++    @Cacheable(value = USER_DATA_CACHE, key = "#userId", unless = "#result == null")
++    public UserData getUserData(Long userId) {
++        log.info("Fetching aggregated data for user: {}", userId);
++
++        try {
++            // Execute both API calls in parallel
++            CompletableFuture<User> userFuture = apiClient.getUser(userId);
++            CompletableFuture<List<Post>> postsFuture = apiClient.getPosts(userId);
++
++            // Wait for both to complete
++            CompletableFuture.allOf(userFuture, postsFuture).join();
++
++            User user = userFuture.join();
++            List<Post> posts = postsFuture.join();
++
++            if (user == null) {
++                throw new UserNotFoundException(userId);
++            }
++
++            UserData userData = UserData.of(user, posts);
++            log.info("Successfully aggregated data for user {}: {} posts found", userId, userData.postCount());
++
++            return userData;
++
++        } catch (CompletionException e) {
++            Throwable cause = e.getCause();
++            log.error("Error fetching user data for {}: {}", userId, cause.getMessage());
++
++            if (cause instanceof UserNotFoundException) {
++                throw new UserNotFoundException(userId);
++            }
++            throw (RuntimeException) cause;
++        }
++    }
++
++    /**
++     * Fetches aggregated user data reactively.
++     * Uses Mono.zip for parallel execution.
++     *
++     * @param userId the user ID to fetch data for
++     * @return Mono containing the aggregated user data
++     */
++    @Timed(value = "service.user.data.get.reactive", description = "Time to aggregate user data reactively")
++    public Mono<UserData> getUserDataReactive(Long userId) {
++        log.info("Fetching aggregated data reactively for user: {}", userId);
++
++        return Mono.zip(
++                        apiClient.getUserReactive(userId),
++                        apiClient.getPostsReactive(userId)
++                )
++                .map(tuple -> {
++                    User user = tuple.getT1();
++                    List<Post> posts = tuple.getT2();
++                    return UserData.of(user, posts);
++                })
++                .doOnSuccess(userData ->
++                        log.info("Successfully aggregated data for user {}: {} posts", userId, userData.postCount()))
++                .doOnError(error ->
++                        log.error("Error fetching user data for {}: {}", userId, error.getMessage()));
++    }
++
++    /**
++     * Fetches only user details.
++     *
++     * @param userId the user ID to fetch
++     * @return the user details
++     */
++    @Timed(value = "service.user.get", description = "Time to fetch user")
++    public User getUser(Long userId) {
++        log.debug("Fetching user: {}", userId);
++        try {
++            User user = apiClient.getUser(userId).join();
++            if (user == null) {
++                throw new UserNotFoundException(userId);
++            }
++            return user;
++        } catch (CompletionException e) {
++            throw handleCompletionException(e, userId);
++        }
++    }
++
++    /**
++     * Fetches only user's posts.
++     *
++     * @param userId the user ID whose posts to fetch
++     * @return list of posts
++     */
++    @Timed(value = "service.posts.get", description = "Time to fetch posts")
++    public List<Post> getPosts(Long userId) {
++        log.debug("Fetching posts for user: {}", userId);
++        try {
++            return apiClient.getPosts(userId).join();
++        } catch (CompletionException e) {
++            throw handleCompletionException(e, userId);
++        }
++    }
++
++    private RuntimeException handleCompletionException(CompletionException e, Long userId) {
++        Throwable cause = e.getCause();
++        if (cause instanceof UserNotFoundException) {
++            return new UserNotFoundException(userId);
++        }
++        if (cause instanceof RuntimeException re) {
++            return re;
++        }
++        return new RuntimeException(cause);
++    }
+ }

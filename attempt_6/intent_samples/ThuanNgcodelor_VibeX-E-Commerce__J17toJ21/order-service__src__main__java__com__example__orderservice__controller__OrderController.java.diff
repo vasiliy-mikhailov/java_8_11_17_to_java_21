@@ -1,0 +1,190 @@
+diff --git a/order-service/src/main/java/com/example/orderservice/controller/OrderController.java b/order-service/src/main/java/com/example/orderservice/controller/OrderController.java
+index b1f8990..20763f5 100644
+--- a/order-service/src/main/java/com/example/orderservice/controller/OrderController.java
++++ b/order-service/src/main/java/com/example/orderservice/controller/OrderController.java
+@@ -1,5 +1,6 @@
+ package com.example.orderservice.controller;
+ 
++import com.example.orderservice.client.GhnApiClient;
+ import com.example.orderservice.client.StockServiceClient;
+ import com.example.orderservice.client.UserServiceClient;
+ import com.example.orderservice.dto.AddressDto;
+@@ -7,14 +8,16 @@ import com.example.orderservice.dto.FrontendOrderRequest;
+ import com.example.orderservice.dto.OrderDto;
+ import com.example.orderservice.dto.OrderItemDto;
+ import com.example.orderservice.dto.ProductDto;
++import com.example.orderservice.dto.ShopOwnerDto;
+ import com.example.orderservice.dto.SizeDto;
+ import com.example.orderservice.dto.UpdateOrderRequest;
+ import com.example.orderservice.jwt.JwtUtil;
+ import com.example.orderservice.model.Order;
+-import com.example.orderservice.model.OrderItem;
++import com.example.orderservice.repository.ShippingOrderRepository;
+ import com.example.orderservice.service.OrderService;
+ import jakarta.servlet.http.HttpServletRequest;
+ import lombok.RequiredArgsConstructor;
++import lombok.extern.slf4j.Slf4j;
+ import org.modelmapper.ModelMapper;
+ import org.springframework.data.domain.Page;
+ import org.springframework.http.HttpStatus;
+@@ -29,12 +32,15 @@ import java.util.stream.Collectors;
+ @RestController
+ @RequestMapping("/v1/order")
+ @RequiredArgsConstructor
++@Slf4j
+ public class OrderController {
+     private final OrderService orderService;
+     private final ModelMapper modelMapper;
+     private final JwtUtil jwtUtil;
+     private final StockServiceClient stockServiceClient;
+     private final UserServiceClient userServiceClient;
++    private final ShippingOrderRepository shippingOrderRepository;
++    private final GhnApiClient ghnApiClient;
+ 
+     private OrderDto enrichOrderDto(Order order) {
+         OrderDto dto = modelMapper.map(order, OrderDto.class);
+@@ -118,6 +124,18 @@ public class OrderController {
+                     .collect(Collectors.toList());
+             dto.setOrderItems(enrichedItems);
+         }
++        
++        // Fetch shipping fee from ShippingOrder
++        try {
++            shippingOrderRepository.findByOrderId(order.getId())
++                .ifPresent(shippingOrder -> {
++                    if (shippingOrder.getShippingFee() != null) {
++                        dto.setShippingFee(shippingOrder.getShippingFee().doubleValue());
++                    }
++                });
++        } catch (Exception e) {
++            System.err.println("Failed to fetch shipping fee for orderId: " + order.getId() + " - " + e.getMessage());
++        }
+ 
+         return dto;
+     }
+@@ -195,6 +213,125 @@ public class OrderController {
+         return ResponseEntity.ok(address);
+     }
+ 
++    @PutMapping("/cancel/{orderId}")
++    ResponseEntity<?> cancelOrder(@PathVariable String orderId, @RequestBody(required = false) Map<String, String> payload) {
++        try {
++            String reason = payload != null ? payload.getOrDefault("reason", null) : null;
++            Order cancelled = orderService.cancelOrder(orderId);
++            if (reason != null && !reason.isBlank()) {
++                log.info("Order {} cancelled. Reason: {}", orderId, reason);
++            }
++            return ResponseEntity.ok(Map.of(
++                    "message", "Order cancelled",
++                    "orderId", cancelled.getId(),
++                    "status", cancelled.getOrderStatus().name(),
++                    "reason", reason
++            ));
++        } catch (RuntimeException e) {
++            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
++                    "error", "CANCEL_FAILED",
++                    "message", e.getMessage()
++            ));
++        }
++    }
++    
++    @PostMapping("/calculate-shipping-fee")
++    ResponseEntity<?> calculateShippingFee(@RequestBody com.example.orderservice.dto.CalculateShippingFeeRequest request, HttpServletRequest httpRequest) {
++        try {
++            // 1. Get customer address
++            AddressDto customerAddress = userServiceClient.getAddressById(request.getAddressId()).getBody();
++            if (customerAddress == null) {
++                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
++                    "error", "ADDRESS_NOT_FOUND",
++                    "message", "Address not found"
++                ));
++            }
++            
++            // 2. Validate GHN fields
++            if (customerAddress.getDistrictId() == null || customerAddress.getWardCode() == null) {
++                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
++                    "error", "ADDRESS_MISSING_GHN_FIELDS",
++                    "message", "Address missing GHN fields. Please update address with province, district, and ward."
++                ));
++            }
++            
++            // 3. Get shop owner address (FROM address)
++            String shopOwnerId = request.getShopOwnerId();
++            
++            // If shop owner ID not provided, try to get from first product
++            if (shopOwnerId == null || shopOwnerId.isBlank()) {
++                if (request.getProductId() != null && !request.getProductId().isBlank()) {
++                    try {
++                        ResponseEntity<ProductDto> productResponse = stockServiceClient.getProductById(request.getProductId());
++                        if (productResponse != null && productResponse.getBody() != null) {
++                            shopOwnerId = productResponse.getBody().getUserId();
++                        }
++                    } catch (Exception e) {
++                        System.err.println("Failed to get product: " + e.getMessage());
++                    }
++                }
++            }
++            
++            // 4. Get shop owner address
++            ShopOwnerDto shopOwner = null;
++            if (shopOwnerId != null && !shopOwnerId.isBlank()) {
++                try {
++                    ResponseEntity<ShopOwnerDto> shopOwnerResponse = userServiceClient.getShopOwnerByUserId(shopOwnerId);
++                    if (shopOwnerResponse != null && shopOwnerResponse.getBody() != null) {
++                        shopOwner = shopOwnerResponse.getBody();
++                    }
++                } catch (Exception e) {
++                    System.err.println("Failed to get shop owner: " + e.getMessage());
++                }
++            }
++            
++            // If no shop owner, we can't calculate fee
++            if (shopOwner == null || shopOwner.getDistrictId() == null || shopOwner.getWardCode() == null) {
++                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
++                    "error", "SHOP_OWNER_ADDRESS_NOT_CONFIGURED",
++                    "message", "Shop owner address not configured. Please configure shop address in Settings."
++                ));
++            }
++            
++            // 5. Calculate weight (default 500g per item if not provided)
++            int weight = request.getWeight() != null ? request.getWeight() : (request.getQuantity() != null ? request.getQuantity() * 500 : 1000);
++            
++            // 6. Build GHN fee calculation request
++            com.example.orderservice.dto.GhnCalculateFeeRequest ghnRequest = com.example.orderservice.dto.GhnCalculateFeeRequest.builder()
++                .fromDistrictId(shopOwner.getDistrictId())
++                .fromWardCode(shopOwner.getWardCode())
++                .toDistrictId(customerAddress.getDistrictId())
++                .toWardCode(customerAddress.getWardCode())
++                .weight(weight)
++                .length(20) // cm
++                .width(15)
++                .height(10)
++                .serviceTypeId(2) // Standard
++                .build();
++            
++            // 7. Call GHN API
++            com.example.orderservice.dto.GhnCalculateFeeResponse ghnResponse = ghnApiClient.calculateFee(ghnRequest);
++            
++            if (ghnResponse == null || ghnResponse.getCode() != 200) {
++                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
++                    "error", "GHN_API_ERROR",
++                    "message", ghnResponse != null ? ghnResponse.getMessage() : "Failed to calculate shipping fee"
++                ));
++            }
++            
++            return ResponseEntity.ok(Map.of(
++                "shippingFee", ghnResponse.getData().getTotal(),
++                "currency", "VND"
++            ));
++            
++        } catch (Exception e) {
++            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
++                "error", "CALCULATION_FAILED",
++                "message", e.getMessage()
++            ));
++        }
++    }
++
+     // Refactor existing endpoint để dùng enrichOrderDto
+     @GetMapping("/getOrderByUserId")
+     public ResponseEntity<List<OrderDto>> getOrderByUserId(HttpServletRequest request) {

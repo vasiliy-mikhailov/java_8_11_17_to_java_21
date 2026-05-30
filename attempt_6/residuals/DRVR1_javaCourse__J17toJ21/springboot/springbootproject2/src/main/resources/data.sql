@@ -1,0 +1,1 @@
+insert into student (id, name, avg) values (352798,'ian', 100);

@@ -1,0 +1,93 @@
+diff --git a/src/main/java/com/recipe/ai/service/RecipeService.java b/src/main/java/com/recipe/ai/service/RecipeService.java
+index 9313b25..03cd54a 100644
+--- a/src/main/java/com/recipe/ai/service/RecipeService.java
++++ b/src/main/java/com/recipe/ai/service/RecipeService.java
+@@ -295,8 +295,9 @@ public class RecipeService {
+         );
+ 
+         try {
+-            // 2. Execute the HTTP POST request (using WebClient) with a small retry policy
+-            final int maxAttempts = 3;
++            // 2. Execute the HTTP POST request (using WebClient) with exponential backoff retry
++            // Increased max attempts for 503 Service Unavailable (Gemini overload)
++            final int maxAttempts = 5;
+             String responseBody = null;
+ 
+             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+@@ -316,28 +317,46 @@ public class RecipeService {
+ 
+                     // if we got a non-null response body, break out and parse it
+                     if (responseBody != null) {
++                        log.info("Successfully received response from Gemini API on attempt {}", attempt);
+                         break;
+                     }
+ 
+                 } catch (WebClientResponseException wcre) {
+-                    // Handle HTTP status codes. For 403, honor the devFallback immediately.
+-                    log.error("Gemini API returned HTTP {} on attempt {}: {}", wcre.getStatusCode().value(), attempt, wcre.getMessage());
++                    int statusCode = wcre.getStatusCode().value();
++                    log.error("Gemini API returned HTTP {} on attempt {}: {}", statusCode, attempt, wcre.getMessage());
++                    
++                    // Handle 403 Forbidden with devFallback
+                     if (wcre.getStatusCode() == HttpStatus.FORBIDDEN) {
+                         if (devFallback) {
+                             log.warn("Received 403 Forbidden from Gemini API; devFallback enabled — returning development mock response.");
+                             return createMockRecipe(pantryItems);
+                         } else {
+-                            log.warn("Received 403 Forbidden from Gemini API; devFallback disabled — not returning mock.");
+-                            return null;
++                            log.error("Received 403 Forbidden from Gemini API; devFallback disabled — rejecting request.");
++                            throw new RuntimeException("Gemini API authentication failed (403). Please check API key configuration.");
+                         }
+                     }
+-                    // For other 5xx/429 style errors, retry unless we've exhausted attempts
++                    
++                    // For 503 Service Unavailable, use longer exponential backoff
++                    if (wcre.getStatusCode() == HttpStatus.SERVICE_UNAVAILABLE) {
++                        if (attempt >= maxAttempts) {
++                            log.error("Gemini API still returning 503 after {} attempts - service may be overloaded", maxAttempts);
++                            throw new RuntimeException("Gemini API is currently unavailable (503). Please try again in a few minutes.");
++                        } else {
++                            // Exponential backoff: 1s, 2s, 4s, 8s
++                            long backoffMs = (long) (1000 * Math.pow(2, attempt - 1));
++                            log.warn("Attempt {} failed with 503 Service Unavailable — retrying after {}ms", attempt, backoffMs);
++                            try { Thread.sleep(backoffMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
++                            continue;
++                        }
++                    }
++                    
++                    // For other 5xx/429 errors, use standard retry
+                     if (attempt >= maxAttempts) {
+-                        log.error("Gemini API returned HTTP {} on final attempt: {}", wcre.getStatusCode().value(), wcre.getMessage(), wcre);
+-                        return null;
++                        log.error("Gemini API returned HTTP {} on final attempt", statusCode);
++                        throw new RuntimeException(String.format("Gemini API error (%d) after %d attempts", statusCode, maxAttempts));
+                     } else {
+-                        long backoffMs = 300L * attempt;
+-                        log.warn("Attempt {} failed with HTTP {} — retrying after {}ms", attempt, wcre.getStatusCode().value(), backoffMs);
++                        long backoffMs = 500L * attempt;
++                        log.warn("Attempt {} failed with HTTP {} — retrying after {}ms", attempt, statusCode, backoffMs);
+                         try { Thread.sleep(backoffMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                         continue;
+                     }
+@@ -347,9 +366,9 @@ public class RecipeService {
+                     log.error("Transport/WebClient error on attempt {}: {}", attempt, we.getMessage());
+                     if (attempt >= maxAttempts) {
+                         log.error("Transport/WebClient error on final attempt: {}", we.getMessage(), we);
+-                        return null;
++                        throw new RuntimeException("Failed to connect to Gemini API after " + maxAttempts + " attempts", we);
+                     } else {
+-                        long backoffMs = 300L * attempt;
++                        long backoffMs = 500L * attempt;
+                         log.warn("Attempt {} transport error — retrying after {}ms", attempt, backoffMs);
+                         try { Thread.sleep(backoffMs); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                         continue;
+@@ -360,7 +379,7 @@ public class RecipeService {
+             if (responseBody == null) {
+                 // No response obtained after retries
+                 log.error("No response body obtained from Gemini API after {} attempts", maxAttempts);
+-                return null;
++                throw new RuntimeException("Failed to get response from Gemini API after " + maxAttempts + " attempts");
+             }
+ 
+             // 3. Parse the result into DTOs to avoid unchecked casts
