@@ -13,7 +13,7 @@ Action vocabulary: `git` (init, add, commit, reset --hard, status, diff), the sh
 
 **Environment.** Java toolchains and Maven are reachable only through the `mvn` command on your PATH (dispatches to a docker container providing JDK 8/11/17/21 and Maven 3.9). Bump scripts are on your PATH as `bump_<from>_to_<to>.sh`. `java`/`javac` binaries are not directly installed; do not try to install them. Switch JDK per command with `JDK=<n>` (e.g. `JDK=21 mvn test`).
 
-**Recipe-artifact reachability.** `tech.mikhailov.bump_java_version_recipes:claude-recipes:1.0.0` lives only in the host's `~/.m2-fitness/repository` cache that the `mvn` wrapper bind-mounts as `/root/.m2`. Nexus does NOT proxy it (HTTP 404). Do not clear or re-init the local cache; do not run `mvn` outside the wrapper.
+**Recipe-artifact reachability.** `tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0` lives only in the host's `~/.m2-fitness/repository` cache that the `mvn` wrapper bind-mounts as `/root/.m2`. Nexus does NOT proxy it (HTTP 404). Do not clear or re-init the local cache; do not run `mvn` outside the wrapper.
 
 **Lombok-vs-javac21.** Any project whose effective Lombok is < `1.18.30` crashes javac21 with `NoSuchFieldError: JCTree$JCImport.qualid`. The bump scripts handle this with a `lombok_safe_bump` prelude (UpgradeDependencyVersion with `overrideManagedVersion: true` + property variants) under `JDK=<jv_from>` before any JDK-`<jv_to>` step. After the bump script succeeds, the project's Lombok is ≥ 1.18.30, so post-bump rewrite recipes are safe under `JDK=<jv_to>`.
 
@@ -37,7 +37,7 @@ Each row: literal `[ERROR]` trigger you'll see, the root cause, and the exact fi
 ```
 JDK=<jv_to> mvn -B -ntp org.openrewrite.maven:rewrite-maven-plugin:6.40.0:run \
   -Drewrite.activeRecipes=<RECIPE_FQN> \
-  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:claude-recipes:1.0.0
+  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0
 ```
 
 | `[ERROR]` trigger | root cause | fix |

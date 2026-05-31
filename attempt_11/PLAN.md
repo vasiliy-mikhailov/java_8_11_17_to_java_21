@@ -40,7 +40,7 @@ compile — chasing noise. Attempt 10 delivered the two things these methods req
 ## Starting point
 
 - Seed candidate: `attempt_11/prompt.md` (copied from attempt 10; ≈96.5% on the clean corpus).
-- Seed catalog: `tech.mikhailov.bump_java_version_recipes:claude-recipes:1.0.0` (4 Spring recipes) + the bump
+- Seed catalog: `tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0` (4 Spring recipes) + the bump
   scripts' OpenRewrite cascade.
 - Harness: `tools/` (carried from attempt 10 — verdict, ladder, OH driver, digest).
 

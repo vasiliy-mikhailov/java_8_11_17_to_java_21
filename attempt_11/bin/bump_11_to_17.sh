@@ -5,7 +5,7 @@ set -uo pipefail
 WORK=${1:?usage: bump_11_to_17.sh <workdir>}
 cd "$WORK"
 
-COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:claude-recipes:1.0.0"
+COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0"
 PLUGIN="org.openrewrite.maven:rewrite-maven-plugin:6.40.0"
 
 # Workdir-local lombok safe-bump rewrite.yml (visible inside docker at /work/src/.bump_lombok.yml).

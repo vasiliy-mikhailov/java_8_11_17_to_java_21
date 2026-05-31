@@ -5,7 +5,7 @@ set -uo pipefail
 WORK=${1:?usage: bump_8_to_11.sh <workdir>}
 cd "$WORK"
 
-COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:claude-recipes:1.0.0"
+COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0"
 PLUGIN="org.openrewrite.maven:rewrite-maven-plugin:6.40.0"
 
 # Write the compound lombok rewrite.yml INSIDE the workdir (so it's visible inside
