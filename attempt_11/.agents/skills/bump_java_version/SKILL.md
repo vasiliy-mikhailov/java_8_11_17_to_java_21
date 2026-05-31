@@ -1,0 +1,65 @@
+---
+name: bump_java_version
+description: Migrate a Maven project from one Java LTS to the next (8->11, 11->17, 17->21) so it still compiles under the new JDK and previously-passing tests still pass. Use when upgrading or bumping the Java version of a Maven project, modernizing to a newer JDK or LTS, or performing the Spring Boot 2 to 3 / javax to jakarta migration that a Java upgrade requires.
+---
+
+## Execution discipline — READ THIS FIRST
+You are a limited executor in a FIXED, correctly-configured environment. The `mvn` command, its Docker/JDK wrapper, `JDK=<n>` switching, the caching proxy, and the `bump_<jv_from>_to_<jv_to>.sh` scripts ALL WORK AS DESCRIBED. NEVER inspect, debug, or second-guess the toolchain — do not run `which docker`, do not cat the `mvn` wrapper, do not read `/opt` scripts, do not probe how JDKs are installed. Run the Basic flow steps in order, each ONCE, unless a failure-table fix explicitly tells you to re-run. NEVER repeat a step that already succeeded. The decisive action is Step 3 (run `bump_<jv_from>_to_<jv_to>.sh .`) — reach it within your first few actions: do baseline (Steps 1-2) once, then immediately run the bump script.
+
+# Problem — Java LTS bump (one step: jv_from → next LTS)
+
+## Purpose
+This project builds and passes tests under Java `jv_from` (8, 11, or 17). Bump it to the next Java LTS (`jv_to` = 11, 17, or 21 respectively) so the same project builds and the same tests still pass.
+
+The whole job is: **run the basic flow; on each known failure output, apply the listed fix.** Nothing else.
+
+## Contract and constraints
+Action vocabulary: `git` (init, add, commit, reset --hard, status, diff), the shipped bump script (`bump_<jv_from>_to_<jv_to>.sh <workdir>`), `mvn compile`, `mvn test`, and any fix listed in the failure-output table below. No improvisation: no source edits you author yourself, no bespoke recipes, no shell hackery beyond what the table prescribes.
+
+**Environment.** Java toolchains and Maven are reachable only through the `mvn` command on your PATH (dispatches to a docker container providing JDK 8/11/17/21 and Maven 3.9). Bump scripts are on your PATH as `bump_<from>_to_<to>.sh`. `java`/`javac` binaries are not directly installed; do not try to install them. Switch JDK per command with `JDK=<n>` (e.g. `JDK=21 mvn test`).
+
+**Recipe-artifact reachability.** `tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0` lives only in the host's `~/.m2-fitness/repository` cache that the `mvn` wrapper bind-mounts as `/root/.m2`. Nexus does NOT proxy it (HTTP 404). Do not clear or re-init the local cache; do not run `mvn` outside the wrapper.
+
+**Lombok-vs-javac21.** Any project whose effective Lombok is < `1.18.30` crashes javac21 with `NoSuchFieldError: JCTree$JCImport.qualid`. The bump scripts handle this with a `lombok_safe_bump` prelude (UpgradeDependencyVersion with `overrideManagedVersion: true` + property variants) under `JDK=<jv_from>` before any JDK-`<jv_to>` step. After the bump script succeeds, the project's Lombok is ≥ 1.18.30, so post-bump rewrite recipes are safe under `JDK=<jv_to>`.
+
+## Basic flow
+
+1. `git init && git add -A && git commit -m baseline`. If the workdir root has no `pom.xml`, the Maven project is nested (e.g. in a `*/` subdir): run `find . -name pom.xml -not -path "*/.git/*"`, `cd` into the directory of the shallowest match, and run every later step (baseline test, bump script, compile, test) from there.
+2. `JDK=<jv_from> mvn test` → record `BASELINE_PASS` from `**/target/surefire-reports/TEST-*.xml` (parse each XML's `<testsuite>` root attributes `tests`/`failures`/`errors`/`skipped`; do **not** grep mvn stdout). `BASELINE_PASS` is the set of tests with no failure/error pre-bump. Tests that already error in baseline (Docker not available, missing external service, etc.) are NOT in `BASELINE_PASS` and are not your responsibility — they fail both before and after the bump.
+3. `bump_<jv_from>_to_<jv_to>.sh .` → rc=0 expected.
+4. `JDK=<jv_to> mvn compile` → rc=0 expected.
+5. Clear `target/surefire-reports/` (root-owned files: clear via `docker run --rm --entrypoint bash -v $WORK:/work j21-fitness:latest -c "rm -rf /work/target"`). Then `JDK=<jv_to> mvn test` → parse surefire; if every test in `BASELINE_PASS` still passes, `git commit -am bump` and **stop, you are done**.
+6. If step 3, 4 or 5 fails, read the `[ERROR]` block. Look it up in the failure-output table below. If a trigger matches, apply the fix verbatim, `git commit`, re-run from the failed step. If no trigger matches, bail.
+
+## Reward
+`JDK=<jv_to> mvn compile` succeeds AND every test in `BASELINE_PASS` passes `JDK=<jv_to> mvn test`. The diff vs initial commit is the deliverable.
+
+## Failure outputs
+
+Each row: literal `[ERROR]` trigger you'll see, the root cause, and the exact fix. A fix is one of: a pom.xml edit, a `mvn rewrite:run` invocation, a docker cleanup, or a bail with a labelled reason.
+
+`mvn rewrite:run` invocation template (substitute `<RECIPE_FQN>`):
+```
+JDK=<jv_to> mvn -B -ntp org.openrewrite.maven:rewrite-maven-plugin:6.40.0:run \
+  -Drewrite.activeRecipes=<RECIPE_FQN> \
+  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0
+```
+
+| `[ERROR]` trigger | root cause | fix |
+|---|---|---|
+| `Could not find artifact org.liquibase.ext:liquibase-hibernate5` | The artifact was renamed `liquibase-hibernate5` → `liquibase-hibernate6` and only the new name is published for liquibase ≥ 4.20. | pom: replace every `<artifactId>liquibase-hibernate5</artifactId>` with `<artifactId>liquibase-hibernate6</artifactId>`; set `<liquibase.version>4.27.0</liquibase.version>`. |
+| `Could not resolve [...] htmlunit:jar:2.6` | htmlunit 2.6 was pulled from Maven Central; 2.70.0 is the floor that resolves on modern JDKs. | pom: set `net.sourceforge.htmlunit:htmlunit` version to `2.70.0`. |
+| `Could not find artifact org.springdoc:springdoc-openapi-ui` | springdoc renamed `springdoc-openapi-ui` → `springdoc-openapi-starter-webmvc-ui` in 2.x; 1.x is no longer published. | pom: replace `<artifactId>springdoc-openapi-ui</artifactId>` with `<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>`; set version `2.3.0`. |
+| `invalid source release: 21 with --enable-preview` (during `JDK=<jv_to>` step) | The pom still pins `<source>/<target>` to `<jv_from>` while `--enable-preview` is set; under JDK `<jv_to>`, `--enable-preview` is only legal when source/target = `<jv_to>`. The bump script's `UpgradeBuildToJava21` would normally raise source/target, but it can't if the project has a hardcoded `<source>17</source>` outside what the recipe knows to match. | pom: bump every `<source>17</source>`/`<target>17</target>`/`<release>17</release>` inside the `maven-compiler-plugin` config (NOT property values — leave `<java.version>` and `<maven.compiler.source>` alone if they appear; those are project-level and the bump script's plugins21/build21 will handle them on the next run) to the matching `<jv_to>` value. Then re-run `bump_<jv_from>_to_<jv_to>.sh`. |
+| `invalid target release: <jv_to>` during the bump script's `lombok_safe_bump` step (JDK=`<jv_from>`) | Caused by the previous fix having pre-bumped `<source>/<target>` to `<jv_to>` in pom; the bump script's first step runs maven-compiler-plugin under `JDK=<jv_from>` which can't target `<jv_to>`. | Revert the pre-bump (`git reset --hard HEAD`) and instead apply the strip-`--enable-preview` fallback: pom — delete every `<arg>--enable-preview</arg>`, every `<compilerArgs>` block whose sole entry is `--enable-preview`, every `<argLine>--enable-preview</argLine>` from `maven-surefire-plugin`/`maven-failsafe-plugin`. This is safe iff the project's preview features under `<jv_from>` became standard in `<jv_to>` (true for pattern matching in switch / record patterns / sealed patterns: preview in 17, standard in 21). If `mvn compile` then fails with `[ERROR] ... is a preview feature and is disabled by default`, the project genuinely needs JDK-`<jv_from>` preview features the bump cannot preserve — bail with `PREVIEW_FEATURES_UNPRESERVABLE`. |
+| `org.jsonschema2pojo.exception.ClassAlreadyExistsException` (typically `Could not create enum. [...] Version`) | Stale `target/` from a prior JDK-`<jv_from>` run still contains generated classes. | Cleanup (no pom edit): `docker run --rm --entrypoint bash -v <workdir>:/work j21-fitness:latest -c "rm -rf /work/target"`. Then re-run the failed step. |
+| `cannot find symbol [...] class WebSecurityConfigurerAdapter` or `package org.springframework.security.config.annotation.web.configuration does not contain WebSecurityConfigurerAdapter` | Spring Security 6 removed `WebSecurityConfigurerAdapter`; class extends it and breaks compile post-bump. | `mvn rewrite:run` with `<RECIPE_FQN>` = `tech.mikhailov.bump_java_version_recipes.RewriteWebSecurityConfigurerAdapterToFilterChain`. Then `git commit -am "post-bump recipe: wsca"`, re-run failed step. |
+| `incompatible types: org.springframework.http.HttpStatusCode cannot be converted to org.springframework.http.HttpStatus` | Spring 6 widened `ResponseEntity.getStatusCode()` return type from `HttpStatus` to `HttpStatusCode`; assignments into `HttpStatus` locals no longer compile. | `mvn rewrite:run` with `<RECIPE_FQN>` = `tech.mikhailov.bump_java_version_recipes.WidenHttpStatusToHttpStatusCode`. Commit + re-run. |
+| Test failure in a `@WebMvcTest` slice: assertion `Status expected:<200> but was:<401>` or `<403>`, AND the project has its own `@Configuration`-annotated `SecurityConfig`/`SecurityConfiguration` class | Spring Boot 3 `@WebMvcTest` slices don't pick up the project's main `SecurityConfig` by default; tests get filter-chain that 401s. | `mvn rewrite:run` with `<RECIPE_FQN>` = `tech.mikhailov.bump_java_version_recipes.AddSecurityConfigImportForWebMvcTest`. Commit + re-run. |
+| OAuth2 login test returns `302` redirect to `/login` (or `401`) when the test expected the configured `authenticationEntryPoint`; project uses both `.oauth2Login(...)` and `.exceptionHandling(eh -> eh.authenticationEntryPoint(...))` | Spring Security 6 `.oauth2Login()` registers its own `LoginUrlAuthenticationEntryPoint` that supersedes the global EP. | `mvn rewrite:run` with `<RECIPE_FQN>` = `tech.mikhailov.bump_java_version_recipes.ScopeAuthenticationEntryPointToApiForOAuth2Login`. Commit + re-run. |
+| `Java 21 (65) is not supported by the current version of Byte Buddy` (often surfaced by `hibernate-enhance-maven-plugin`, Mockito, or a Spring Boot 2.x app under JDK 21) | A transitively-pinned Byte Buddy (via Hibernate / Mockito / the SB 2.x BOM) predates JDK 21 support (need >= 1.14.9). Usually the *only* JDK-21 blocker and far lighter to fix than a full Spring Boot 3 upgrade. | pom: add to `<dependencyManagement>` `net.bytebuddy:byte-buddy:1.14.12` and `net.bytebuddy:byte-buddy-agent:1.14.12` (a version there overrides the BOM). If the error comes from a plugin (e.g. `hibernate-enhance-maven-plugin`), also add those two as `<dependencies>` of that plugin. Re-run `bump_<jv_from>_to_<jv_to>.sh .`. Only if compile *still* fails on the SB2 BOM, fall through to the Spring Boot 2->3 row below. |
+| `ASM ClassReader failed to parse class file - probably due to a new Java class file version that isn't supported yet` AND/OR `Unsupported class file major version 65` | Project's Spring Boot 2.x BOM pins ASM/ByteBuddy/Mockito too old to read JDK 21 bytecode. Needs Spring Boot 2 → 3 upgrade (not currently shipped as a bump script). | Reset the bump (`git reset --hard HEAD`), run `sb2_to_sb3.sh .` (Spring Boot 2 to 3.3; runs under `JDK=<jv_from>`); `git commit -am sb3`; re-run `bump_<jv_from>_to_<jv_to>.sh .`. If compile still fails on residual source the recipe could not auto-migrate, bail `SB2_BOM_NEEDS_SB3_BUMP`. |
+| `Could not find a valid Docker environment` / `Previous attempts to find a Docker environment failed` / `Could not start a new session [...] selenium` | Test needs Docker daemon or Selenium server that isn't in the sandbox. Test errored pre-bump too (it's not in `BASELINE_PASS`). | Ignore — these are not regressions. If the only test failures are these, the bump still PASSES the conservation check. If you must bail for other reasons, label `ENV_DOCKER_OR_SELENIUM_UNAVAILABLE`. |
+
+## When to bail
+If after running the bump script + applying every matching fix the build still won't compile or tests still regress vs `BASELINE_PASS`, state which step failed and the unresolved `[ERROR]` (with the bail label if the table prescribes one). Do not invent edits. **When you bail, emit the label on its own line as the final line of your message in the exact form `BAIL:<LABEL>` (uppercase, no backticks, no markdown bold) — e.g. `BAIL:SB2_BOM_NEEDS_SB3_BUMP`.**
