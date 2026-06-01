@@ -26,8 +26,13 @@ SEED = int(arg("--seed", "0"))
 MAX_ATTEMPTS = int(arg("--max-attempts", "10"))   # max COMPILE attempts per repo
 SCAN_CAP = int(arg("--scan-cap", "150"))          # max commits inspected for eligibility (cheap)
 LIMIT = arg("--limit"); REPOS_OVERRIDE = arg("--repos")
-rng = random.Random(SEED)
-REPOS = REPOS_OVERRIDE.split(",") if REPOS_OVERRIDE else json.load(open(A + "/dataset-repos.json"))
+REPOS_FILE = arg("--repos-file"); OUT = arg("--out")
+if REPOS_FILE:
+    REPOS = [r.strip() for r in open(REPOS_FILE) if r.strip()]
+elif REPOS_OVERRIDE:
+    REPOS = REPOS_OVERRIDE.split(",")
+else:
+    REPOS = json.load(open(A + "/dataset-repos.json"))
 if LIMIT:
     REPOS = REPOS[:int(LIMIT)]
 
@@ -52,7 +57,7 @@ for repo in REPOS:
     if not os.path.isdir(wd + "/.git"):
         print("CLONE-FAIL", repo, flush=True); continue
     commits = sh(f"git -C {wd} log --all --pretty=%H", 60).stdout.split()
-    rng.shuffle(commits)
+    random.Random(f"{SEED}:{repo}").shuffle(commits)  # per-(seed,repo): order-independent, parallel-safe
     accepted = None; compiles = 0; scanned = 0
     for sha in commits:
         if scanned >= SCAN_CAP or compiles >= MAX_ATTEMPTS:
@@ -77,7 +82,7 @@ for repo in REPOS:
         print(f"  NO-VALID-BASELINE {repo} (scanned {scanned}, {compiles} compile attempts)", flush=True)
     sh("rm -rf " + wd, 60)
 
-ds = A + "/dataset-shas.json"
+ds = OUT if OUT else A + "/dataset-shas.json"
 json.dump(out, open(ds, "w"), indent=1)
 print(f"\nSEED={SEED} max_attempts={MAX_ATTEMPTS}: {len(out)}/{len(REPOS)} repos got a valid compiling "
       f"8/11/17 baseline -> dataset-shas.json (seed {SEED})", flush=True)
