@@ -11,8 +11,8 @@ ATTEMPT = f"{HERE}/attempt_6"
 INTENT_SAMPLES = f"{ATTEMPT}/intent_samples"
 RECIPE_SAMPLES = f"{ATTEMPT}/recipe_samples"
 RECIPE_YAML = f"{ATTEMPT}/recipe.yaml"
-VLLM_URL = "http://localhost:8000/v1/chat/completions"
-VLLM_KEY = "sk-ef2926520a83b7f6efac7f4dc5b049842b4b2baebfdc18b69b76220f29fdf272"
+PROPOSER_URL = "http://localhost:8000/v1/chat/completions"
+PROPOSER_KEY = "sk-ef2926520a83b7f6efac7f4dc5b049842b4b2baebfdc18b69b76220f29fdf272"
 
 
 def load_breaking(base, slug):
@@ -108,9 +108,9 @@ def ask_qwen_for_recipe(jv_to, cluster_sig, examples):
         "chat_template_kwargs": {"enable_thinking": False},
     }
     req = urllib.request.Request(
-        VLLM_URL,
+        PROPOSER_URL,
         data=json.dumps(body).encode(),
-        headers={"Authorization": f"Bearer {VLLM_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {PROPOSER_KEY}", "Content-Type": "application/json"},
     )
     try:
         with urllib.request.urlopen(req, timeout=120) as r:

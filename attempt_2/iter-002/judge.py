@@ -7,7 +7,7 @@ DS = json.load(open(f"{HERE}/attempt_2/java21-migration-dataset.json"))
 ITER = f"{HERE}/attempt_2/iter-002/results"
 print(f"dataset: {len(DS)}", flush=True)
 
-# Load env from .env for VLLM_API_KEY
+# Load env from .env for PROPOSER_API_KEY
 env = os.environ.copy()
 with open(f"{HERE}/.env") as f:
     for line in f:

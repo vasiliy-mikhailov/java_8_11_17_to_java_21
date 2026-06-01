@@ -32,9 +32,9 @@ def load_env(path=f"{BASE}/.env"):
     return env
 
 ENV = load_env()
-VLLM_URL = ENV.get("VLLM_BASE_URL", "https://inference.mikhailov.tech/v1")
-VLLM_KEY = ENV.get("VLLM_API_KEY", "")
-VLLM_MODEL = ENV.get("VLLM_MODEL", "qwen3.6-27b-fp8")
+PROPOSER_URL = ENV.get("PROPOSER_BASE_URL", "https://inference.mikhailov.tech/v1")
+PROPOSER_KEY = ENV.get("PROPOSER_API_KEY", "")
+PROPOSER_MODEL = ENV.get("PROPOSER_MODEL", "qwen3.6-27b-fp8")
 
 
 SYSTEM_PROMPT = """You author OpenRewrite recipe YAML files. Your job: given a git diff representing a human-authored Java migration commit and the target Java version, emit a recipe that captures ONLY the changes REQUIRED to make the project build under the target JDK — nothing else.
@@ -91,7 +91,7 @@ def _call_qwen(slug, meta, diff, *, enable_thinking, max_tokens):
         f"org.example.required.{slug}"
     )
     payload = {
-        "model": VLLM_MODEL,
+        "model": PROPOSER_MODEL,
         "temperature": 0.0,
         "max_tokens": max_tokens,
         "messages": [
@@ -101,9 +101,9 @@ def _call_qwen(slug, meta, diff, *, enable_thinking, max_tokens):
         "chat_template_kwargs": {"enable_thinking": enable_thinking},
     }
     req = urllib.request.Request(
-        f"{VLLM_URL.rstrip('/')}/chat/completions",
+        f"{PROPOSER_URL.rstrip('/')}/chat/completions",
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {VLLM_KEY}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {PROPOSER_KEY}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:

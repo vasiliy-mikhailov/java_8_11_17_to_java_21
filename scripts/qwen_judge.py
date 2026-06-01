@@ -40,9 +40,9 @@ import urllib.request
 from pathlib import Path
 
 
-VLLM_BASE = os.environ.get("VLLM_BASE_URL", "https://inference.mikhailov.tech/qwen-3.6-27b-fp8/v1")
-VLLM_KEY  = os.environ.get("VLLM_API_KEY")
-MODEL     = os.environ.get("VLLM_MODEL", "qwen3.6-27b-fp8")
+PROPOSER_BASE = os.environ.get("PROPOSER_BASE_URL", "https://inference.mikhailov.tech/qwen-3.6-27b-fp8/v1")
+PROPOSER_KEY  = os.environ.get("PROPOSER_API_KEY")
+MODEL     = os.environ.get("PROPOSER_MODEL", "qwen3.6-27b-fp8")
 MAX_DIFF_CHARS = 90_000   # keep well under the 128k context with prompt overhead
 
 
@@ -101,8 +101,8 @@ def git_diff(repo_dir: Path) -> str:
 
 
 def judge(repo_id: str, java_version: int, dependency_family: str, diff: str) -> dict:
-    if not VLLM_KEY:
-        raise SystemExit("VLLM_API_KEY missing — source .env first")
+    if not PROPOSER_KEY:
+        raise SystemExit("PROPOSER_API_KEY missing — source .env first")
     if len(diff) > MAX_DIFF_CHARS:
         diff = diff[: MAX_DIFF_CHARS] + f"\n\n... [diff truncated; full length {len(diff)} chars]\n"
     user = USER_TEMPLATE.format(repo_id=repo_id, java_version=java_version,
@@ -120,9 +120,9 @@ def judge(repo_id: str, java_version: int, dependency_family: str, diff: str) ->
         "max_tokens":  1024,
     }
     req = urllib.request.Request(
-        f"{VLLM_BASE}/chat/completions",
+        f"{PROPOSER_BASE}/chat/completions",
         data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {VLLM_KEY}",
+        headers={"Authorization": f"Bearer {PROPOSER_KEY}",
                  "Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=60) as r:

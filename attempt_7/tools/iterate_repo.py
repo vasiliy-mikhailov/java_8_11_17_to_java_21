@@ -49,9 +49,9 @@ def load_env(path=f"{BASE}/.env"):
     return env
 
 ENV = load_env()
-VLLM_URL = ENV.get("VLLM_BASE_URL", "https://inference.mikhailov.tech/v1")
-VLLM_KEY = ENV.get("VLLM_API_KEY", "")
-VLLM_MODEL = ENV.get("VLLM_MODEL", "qwen3.6-27b-fp8")
+PROPOSER_URL = ENV.get("PROPOSER_BASE_URL", "https://inference.mikhailov.tech/v1")
+PROPOSER_KEY = ENV.get("PROPOSER_API_KEY", "")
+PROPOSER_MODEL = ENV.get("PROPOSER_MODEL", "qwen3.6-27b-fp8")
 
 COMPAT_MATRIX = open(f"{ATTEMPT7}/COMPAT_MATRIX.md").read()
 
@@ -225,7 +225,7 @@ def snapshot_stage_facts(stage):
 
 def call_qwen(system, user, *, max_tokens=8192, enable_thinking=True, temperature=0.0):
     payload = {
-        "model": VLLM_MODEL,
+        "model": PROPOSER_MODEL,
         "temperature": temperature,
         "max_tokens": max_tokens,
         "messages": [
@@ -235,9 +235,9 @@ def call_qwen(system, user, *, max_tokens=8192, enable_thinking=True, temperatur
         "chat_template_kwargs": {"enable_thinking": enable_thinking},
     }
     req = urllib.request.Request(
-        f"{VLLM_URL.rstrip('/')}/chat/completions",
+        f"{PROPOSER_URL.rstrip('/')}/chat/completions",
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {VLLM_KEY}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {PROPOSER_KEY}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:

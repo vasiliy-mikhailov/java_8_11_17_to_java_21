@@ -37,7 +37,7 @@ os.makedirs(stage_dir, exist_ok=True)
 log_path = f'{stage_dir}/dialogue.qwen.log'
 msgs_path = f'{stage_dir}/dialogue.qwen.messages.json'
 
-client = OpenAI(base_url=os.environ['VLLM_BASE_URL'], api_key=os.environ['VLLM_API_KEY'])
+client = OpenAI(base_url=os.environ['PROPOSER_BASE_URL'], api_key=os.environ['PROPOSER_API_KEY'])
 prompt_text = open(PROMPT_PATH).read()
 
 stage_header = f'''## Stage (injected by qwen-rung harness)
@@ -103,7 +103,7 @@ turn = 0
 for turn in range(MAX_TURNS):
     try:
         resp = client.chat.completions.create(
-            model=os.environ['VLLM_MODEL'],
+            model=os.environ['PROPOSER_MODEL'],
             messages=messages, tools=tools, tool_choice='auto',
             temperature=0.0, max_tokens=4096, timeout=120
         )

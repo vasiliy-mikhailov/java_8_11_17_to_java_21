@@ -87,18 +87,18 @@ def main():
     from oh_event_sink import make_callback as oh_make_sink_callback
 
     llm = LLM(
-        model=f'openai/{os.environ["VLLM_MODEL"]}',
-        base_url=os.environ['VLLM_BASE_URL'],
-        api_key=SecretStr(os.environ['VLLM_API_KEY']),
+        model=f'openai/{os.environ["PROPOSER_MODEL"]}',
+        base_url=os.environ['PROPOSER_BASE_URL'],
+        api_key=SecretStr(os.environ['PROPOSER_API_KEY']),
         usage_id=f'oh_drive_{slug[:40]}',
         max_output_tokens=4096,
         temperature=0.0,
         native_tool_calling=True,
     )
     compactor_llm = LLM(
-        model=f'openai/{os.environ["COMPACTOR_VLLM_MODEL"]}',
-        base_url=os.environ['COMPACTOR_VLLM_BASE_URL'],
-        api_key=SecretStr(os.environ['COMPACTOR_VLLM_API_KEY']),
+        model=f'openai/{os.environ["OPENHANDS_CONTEXT_COMPACTOR_MODEL"]}',
+        base_url=os.environ['OPENHANDS_CONTEXT_COMPACTOR_BASE_URL'],
+        api_key=SecretStr(os.environ['OPENHANDS_CONTEXT_COMPACTOR_API_KEY']),
         usage_id=f'oh_drive_condenser_{slug[:40]}',
         max_output_tokens=4096,
         temperature=0.0,
@@ -183,7 +183,7 @@ def main():
         'slug': slug,
         'stage': stage,
         'agent_runtime': 'openhands-sdk-1.17',
-        'backend_model': os.environ['VLLM_MODEL'],
+        'backend_model': os.environ['PROPOSER_MODEL'],
         'prompt_fingerprint': prompt_fp,
         'verdict': verdict,
         'pre_pass_count': pre_pass_count,

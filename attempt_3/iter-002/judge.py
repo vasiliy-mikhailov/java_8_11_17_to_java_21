@@ -23,7 +23,7 @@ with open(f"{HERE}/.env") as f:
             k, v = line.split("=", 1)
             env[k.strip()] = v.strip().strip('"').strip("'")
 
-sem = threading.BoundedSemaphore(6)   # judge concurrency: keep under VLLM_MODEL throughput
+sem = threading.BoundedSemaphore(6)   # judge concurrency: keep under PROPOSER_MODEL throughput
 seen = set()
 done_total = 0
 lock = threading.Lock()

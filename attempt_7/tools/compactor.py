@@ -44,11 +44,11 @@ def load_env(p=f"{BASE}/.env"):
 
 ENV = load_env()
 # Per ff #5: compactor (high-frequency, structured-output) gets its own endpoint when
-# available; falls back to the main VLLM_* values if COMPACTOR_VLLM_* aren't set.
-VLLM_URL = ENV.get("COMPACTOR_VLLM_BASE_URL",
-                   ENV.get("VLLM_BASE_URL", "https://inference.mikhailov.tech/v1")).rstrip("/")
-VLLM_KEY = ENV.get("COMPACTOR_VLLM_API_KEY", ENV.get("VLLM_API_KEY", ""))
-VLLM_MODEL = ENV.get("COMPACTOR_VLLM_MODEL", ENV.get("VLLM_MODEL", "qwen3.6-27b-fp8"))
+# available; falls back to the main PROPOSER_* values if OPENHANDS_CONTEXT_COMPACTOR_* aren't set.
+PROPOSER_URL = ENV.get("OPENHANDS_CONTEXT_COMPACTOR_BASE_URL",
+                   ENV.get("PROPOSER_BASE_URL", "https://inference.mikhailov.tech/v1")).rstrip("/")
+PROPOSER_KEY = ENV.get("OPENHANDS_CONTEXT_COMPACTOR_API_KEY", ENV.get("PROPOSER_API_KEY", ""))
+PROPOSER_MODEL = ENV.get("OPENHANDS_CONTEXT_COMPACTOR_MODEL", ENV.get("PROPOSER_MODEL", "qwen3.6-27b-fp8"))
 
 
 def sh_int(cmd, timeout=10, default=0):
@@ -252,7 +252,7 @@ def latest_digest():
 
 def call_qwen(system, user, max_tokens=4096, thinking=True):
     payload = {
-        "model": VLLM_MODEL,
+        "model": PROPOSER_MODEL,
         "temperature": 0.0,
         "max_tokens": max_tokens,
         "messages": [
@@ -262,9 +262,9 @@ def call_qwen(system, user, max_tokens=4096, thinking=True):
         "chat_template_kwargs": {"enable_thinking": thinking},
     }
     req = urllib.request.Request(
-        VLLM_URL + "/chat/completions",
+        PROPOSER_URL + "/chat/completions",
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {VLLM_KEY}"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {PROPOSER_KEY}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=600) as r:

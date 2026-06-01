@@ -71,9 +71,9 @@ from oh_event_sink import make_callback as oh_make_sink_callback
 
 # Main LLM = Qwen FP8 (proposer)
 llm = LLM(
-    model=f'openai/{os.environ["VLLM_MODEL"]}',
-    base_url=os.environ['VLLM_BASE_URL'],
-    api_key=SecretStr(os.environ['VLLM_API_KEY']),
+    model=f'openai/{os.environ["PROPOSER_MODEL"]}',
+    base_url=os.environ['PROPOSER_BASE_URL'],
+    api_key=SecretStr(os.environ['PROPOSER_API_KEY']),
     usage_id=f'oh_live_{slug[:40]}',
     max_output_tokens=2048,
     temperature=0.0,
@@ -81,9 +81,9 @@ llm = LLM(
 )
 # Compactor LLM = Qwen AWQ on separate vLLM (per .env COMPACTOR_*)
 compactor_llm = LLM(
-    model=f'openai/{os.environ["COMPACTOR_VLLM_MODEL"]}',
-    base_url=os.environ['COMPACTOR_VLLM_BASE_URL'],
-    api_key=SecretStr(os.environ['COMPACTOR_VLLM_API_KEY']),
+    model=f'openai/{os.environ["OPENHANDS_CONTEXT_COMPACTOR_MODEL"]}',
+    base_url=os.environ['OPENHANDS_CONTEXT_COMPACTOR_BASE_URL'],
+    api_key=SecretStr(os.environ['OPENHANDS_CONTEXT_COMPACTOR_API_KEY']),
     usage_id=f'oh_live_condenser_{slug[:40]}',
     max_output_tokens=4096,
     temperature=0.0,
@@ -94,8 +94,8 @@ condenser = LLMSummarizingCondenser(
     max_size=40,    # condense when events exceed this
     keep_first=2,   # always retain the brief + first response
 )
-print(f'=== LLM: {os.environ["VLLM_MODEL"]} via {os.environ["VLLM_BASE_URL"]}')
-print(f'=== Condenser: {os.environ["COMPACTOR_VLLM_MODEL"]} via {os.environ["COMPACTOR_VLLM_BASE_URL"]}  (max_size=40)\n', flush=True)
+print(f'=== LLM: {os.environ["PROPOSER_MODEL"]} via {os.environ["PROPOSER_BASE_URL"]}')
+print(f'=== Condenser: {os.environ["OPENHANDS_CONTEXT_COMPACTOR_MODEL"]} via {os.environ["OPENHANDS_CONTEXT_COMPACTOR_BASE_URL"]}  (max_size=40)\n', flush=True)
 
 agent = Agent(llm=llm,
               tools=get_default_tools(enable_browser=False),

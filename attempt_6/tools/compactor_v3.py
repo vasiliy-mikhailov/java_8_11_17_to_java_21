@@ -7,9 +7,9 @@ for _l in open("/home/vmihaylov/java_8_11_17_to_java_21/.env"):
     _l = _l.strip()
     if _l and not _l.startswith("#") and "=" in _l:
         _k, _v = _l.split("=", 1); _OBSENV[_k] = _v.strip().strip('"').strip("'")
-OBS_URL = _OBSENV.get("OBSERVABILITY_COMPACTOR_URL", "https://inference.mikhailov.tech/qwen-3.6-27b-awq/v1").rstrip("/")
+OBS_URL = _OBSENV.get("OBSERVABILITY_COMPACTOR_BASE_URL", "https://inference.mikhailov.tech/qwen-3.6-27b-awq/v1").rstrip("/")
 OBS_MODEL = _OBSENV.get("OBSERVABILITY_COMPACTOR_MODEL", "qwen3.6-27b-awq")
-OBS_KEY = _OBSENV.get("OBSERVABILITY_COMPACTOR_API_KEY") or _OBSENV.get("VLLM_API_KEY", "")
+OBS_KEY = _OBSENV.get("OBSERVABILITY_COMPACTOR_API_KEY") or _OBSENV.get("PROPOSER_API_KEY", "")
 
 OBS_DIR = "/var/log/observe"
 DIGEST = f"{OBS_DIR}/digest.jsonl"
