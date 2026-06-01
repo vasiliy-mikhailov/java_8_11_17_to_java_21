@@ -148,6 +148,23 @@ def docker_phase(work_dir, recipes_dir, log_dir, phase, jdk, recipe_file=None, t
     return rc, log
 
 
+def _root_rm(*paths):
+    """Reap scratch workdirs as root. docker_phase runs Maven as root inside the
+    build container, so each workdir fills with root-owned files; a user-level
+    shutil.rmtree hits Permission denied and silently leaks them (this is what
+    filled the scratch disk). Per P6, clean docker-owned files through a root
+    container, not host rm. All workdirs share one parent (WORK); mount it and
+    rm the basenames inside a throwaway root container (the project build image)."""
+    paths = [p for p in paths if p and os.path.isdir(p)]
+    if not paths:
+        return
+    parent = os.path.dirname(paths[0])
+    names = " ".join("/w/" + os.path.basename(p) for p in paths)
+    subprocess.run(["docker", "run", "--rm", "-v", parent + ":/w",
+                    "--entrypoint", "sh", IMAGE, "-c", "rm -rf " + names],
+                   capture_output=True, timeout=300)
+
+
 def run_stage(stage):
     repo = stage["repo"]; sha_from = stage["sha_from"]
     jf = stage.get("jv_from", 8); jt = stage.get("jv_to", 21)
@@ -192,8 +209,7 @@ def run_stage(stage):
         )
     finally:
         json.dump(trajectory, open(out_path, "w"), indent=2)
-        for d in (work, recipes, logs):
-            shutil.rmtree(d, ignore_errors=True)
+        _root_rm(work, recipes, logs)
     return slug, trajectory.get("final_status", "?")
 
 
