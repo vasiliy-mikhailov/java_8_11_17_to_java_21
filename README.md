@@ -21,10 +21,10 @@ The baseline every repo is measured against is the one-shot `org.openrewrite.jav
 ```mermaid
 xychart-beta
     title "Recipe pass rate by attempt"
-    x-axis ["a1 (4-repo smoke)", "a3 (271 repos)", "a4 (271 repos)", "a6 (494 stages)", "a7 (395 stages)", "a8 (202 stages)", "a9_v3 (187/202)"]
+    x-axis ["a1 (4-repo smoke)", "a3 (271 repos)", "a4 (271 repos)", "a6 (494 stages)", "a7 (395 stages)", "a8 (202 stages)", "a9_v3 (187/202)", "a10 (431 clean)", "a11 (432 live)"]
     y-axis "PASS rate (%)" 0 --> 100
-    bar [25, 56, 68, 71, 91, 80, 72]
-    line [25, 56, 68, 71, 91, 80, 72]
+    bar [25, 56, 68, 71, 91, 80, 72, 83, 90]
+    line [25, 56, 68, 71, 91, 80, 72, 83, 90]
 ```
 
 Each attempt's champion against the corpus available at the time:
@@ -38,7 +38,8 @@ Each attempt's champion against the corpus available at the time:
 | 7 | per-repo iterative search over a sequenced default chain (`lombok_bump → java8→11 → plugins17 → build17 → java17_transforms → plugins21 → build21 → java21_transforms`) + Qwen-proposed per-repo mutations + rewrite-maven-plugin bumped 6.12.0 → 6.40.0 | 395 J21-target stages | **91 %** | **+24 pp over iter-0 baseline (67 → 91)** |
 | 8 | per-repo iterative search + WSCA recipe + 4 new library entries + COMPAT\_MATRIX gating | 202 stages | **80 %** (162/202) | baseline for attempts 9 / 10 |
 | 9\_v3 | attempt 8 baseline + extended observation library + 4 claude-recipes (WSCA, oauth2Login, WidenHttpStatusToHttpStatusCode, AddSecurityConfigImportForWebMvcTest) | 202 stages (187 processed) | 72 % (135/187) | **regression vs a8 — enriching library past a point hurts; Qwen overcommits without ground truth** |
-| 10 | paste-into-any-coding-agent prompt (`attempt_10/prompt.md`) driven by OpenHands SDK + Qwen 3.6 27B FP8 backend + LLMSummarizingCondenser; Dominanta 2 + Dominanta 7 contract | — | not yet measured at corpus scale; architecture validated on 4 manual stages (clean root-cause findings on all 4; condenser fired 3× on DsTyM\_PharmaciesOnDutyAttica without losing the diagnostic thread) | — |
+| 10 | paste-into-any-coding-agent prompt (`attempt_10/prompt.md`) driven by OpenHands SDK + Qwen 3.6 27B FP8 + LLMSummarizingCondenser | 477 (431 clean) | **75.1%** raw (358/477); **83.1%** clean (358/431, after excluding 46 unmigratable junk baselines); **≈96.5%** with hardened prompt + recovery (416/431) | corpus de-noising + recovery — most "failure" was bad baselines, not migration failure (full detail: `attempt_10/README.md`) |
+| 11 | artifact repackaged as the `bump_java_version` **skill** (`.agents/skills/bump_java_version/`: SKILL.md + scripts + recipes); catalog de-branded to `tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes`; `mvn` wrapper runs non-root (uid 1000) | 432 clean | **~90%** — fresh full re-run via OpenHands+Qwen (in progress) | first apples-to-apples fresh sweep (every datapoint re-executed); skill validated on 2 datapoints × 3 rungs (all PASS); baseline before GEPA/EvoSkills (full detail: `attempt_11/README.md`) |
 
 Numbers track Dominanta 2's reward against the one-shot baseline on the same corpus. Caveat: corpus composition changed across attempts, so absolute PASS rate is comparable within an attempt's column but not across rows.
 
