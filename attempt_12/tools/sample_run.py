@@ -11,7 +11,7 @@ Worker:  (same file, re-launched with --worker)
 """
 import json, subprocess, os, sys, time, fcntl, random
 from collections import Counter
-A = "/home/vmihaylov/java_8_11_17_to_java_21/attempt_12"
+A = "/home/vmihaylov/java_8_11_17_to_java_21/active_attempt"
 QF = "/tmp/sr_queue.txt"; RES = "/tmp/sr_results.jsonl"; CL = "/tmp/sr_claims"; LK = "/tmp/sr.lock"
 NEXT = {8: 11, 11: 17, 17: 21}
 

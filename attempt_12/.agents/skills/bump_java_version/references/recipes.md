@@ -19,11 +19,11 @@ JDK=<jv_to> mvn -B -ntp org.openrewrite.maven:rewrite-maven-plugin:6.40.0:run \
   -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0
 ```
 
-**Building the catalog:** the source is the `recipes/` Maven module at `attempt_11/recipes/`.
+**Building the catalog:** the source is the `recipes/` Maven module at `active_attempt/recipes/`.
 Install it into the local Maven cache the bump scripts read from:
 
 ```
-cd attempt_11/recipes && JDK=17 mvn -q -B -ntp clean install
+cd active_attempt/recipes && JDK=17 mvn -q -B -ntp clean install
 ```
 
 It is **not** published to Maven Central / the Nexus mirror — it lives only in the local `.m2`

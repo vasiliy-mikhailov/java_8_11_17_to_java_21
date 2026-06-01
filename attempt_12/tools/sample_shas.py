@@ -10,10 +10,10 @@ eval is a moving target the skill/recipes must generalize to. jv_to = next LTS (
 17->21). Junk (no-pom / already>=21 / non-compiling) is rejected by the search itself.
 
 Usage: python3 sample_shas.py --seed N [--max-attempts 10] [--scan-cap 150] [--limit M] [--repos a/b,c/d]
-Output: attempt_12/dataset-shas.json = [{repo, sha, jv_from, jv_to, attempts}] (regenerated per run)
+Output: active_attempt/dataset-shas.json = [{repo, sha, jv_from, jv_to, attempts}] (regenerated per run)
 """
 import json, subprocess, sys, os, random
-A = "/home/vmihaylov/java_8_11_17_to_java_21/attempt_12"
+A = "/home/vmihaylov/java_8_11_17_to_java_21/active_attempt"
 NEXT = {8: 11, 11: 17, 17: 21}  # bumpable LTS -> next LTS
 
 def arg(n, d=None):
