@@ -5,6 +5,7 @@
 # Caller is responsible for git baseline + post-build verification + test conservation.
 set -uo pipefail
 WORK=${1:?usage: bump_17_to_21.sh <workdir>}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # resolve sibling scripts by path
 cd "$WORK"
 _jh(){ local v="JAVA_HOME_$1"; printf "%s" "${!v:-${JDK_HOME_BASE:-/opt/jdk}/$1}"; }
 MVN="${MVN:-$(command -v mvn >/dev/null 2>&1 && echo mvn || { [ -x ./mvnw ] && echo ./mvnw || echo mvn; })}"
@@ -69,4 +70,5 @@ run_recipe 21 \
   'org.openrewrite.java.migrate.RemoveIllegalSemicolons,org.openrewrite.java.migrate.lang.ThreadStopUnsupported,org.openrewrite.java.migrate.net.URLConstructorToURICreate,org.openrewrite.java.migrate.util.SequencedCollection,org.openrewrite.java.migrate.util.UseLocaleOf,org.openrewrite.staticanalysis.ReplaceDeprecatedRuntimeExecMethods,org.openrewrite.java.migrate.DeleteDeprecatedFinalize,org.openrewrite.java.migrate.RemovedSubjectMethods' \
   transforms21 || exit $?
 
+"$SCRIPT_DIR/java17_compat.sh" . || true
 echo "=== bump_17_to_21 complete" >&2

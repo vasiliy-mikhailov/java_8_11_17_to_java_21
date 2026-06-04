@@ -3,6 +3,7 @@
 # Usage: ./bump_11_to_17.sh <workdir>
 set -uo pipefail
 WORK=${1:?usage: bump_11_to_17.sh <workdir>}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # resolve sibling scripts by path
 cd "$WORK"
 _jh(){ local v="JAVA_HOME_$1"; printf "%s" "${!v:-${JDK_HOME_BASE:-/opt/jdk}/$1}"; }
 MVN="${MVN:-$(command -v mvn >/dev/null 2>&1 && echo mvn || { [ -x ./mvnw ] && echo ./mvnw || echo mvn; })}"
@@ -63,4 +64,5 @@ run_recipe_yml 11 "rewrite.yml" lombok_safe_bump smoke.bump.lombok_safe_bump || 
 run_recipe 11 org.openrewrite.java.migrate.UpgradePluginsForJava17 plugins17 || exit $?
 run_recipe 17 org.openrewrite.java.migrate.UpgradeBuildToJava17 build17 || exit $?
 
+"$SCRIPT_DIR/java17_compat.sh" . || true
 echo "=== bump_11_to_17 complete" >&2
