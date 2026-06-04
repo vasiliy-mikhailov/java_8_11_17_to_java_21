@@ -3,7 +3,11 @@
 # Usage: ./bump_8_to_11.sh <workdir>
 set -uo pipefail
 WORK=${1:?usage: bump_8_to_11.sh <workdir>}
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"   # resolve sibling scripts by path, not PATH (portability)
 cd "$WORK"
+_jh(){ local v="JAVA_HOME_$1"; printf "%s" "${!v:-${JDK_HOME_BASE:-/opt/jdk}/$1}"; }
+MVN="${MVN:-$(command -v mvn >/dev/null 2>&1 && echo mvn || { [ -x ./mvnw ] && echo ./mvnw || echo mvn; })}"
+
 
 COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0"
 PLUGIN="org.openrewrite.maven:rewrite-maven-plugin:6.40.0"
@@ -32,7 +36,7 @@ EOF
 run_recipe_yml() {
   local jdk=$1 yml=$2 label=$3 recipe_name=$4
   echo "=== [$label] JDK=$jdk yml=$yml" >&2
-  JDK=$jdk mvn -B -ntp "$PLUGIN:run" \
+  JDK=$jdk JAVA_HOME="$(_jh $jdk)" $MVN -B -ntp "$PLUGIN:run" \
     "-Drewrite.activeRecipes=$recipe_name" \
     "-Drewrite.recipeArtifactCoordinates=$COORDS"
   local rc=$?
@@ -43,7 +47,7 @@ run_recipe_yml() {
 run_recipe() {
   local jdk=$1 recipes=$2 label=$3
   echo "=== [$label] JDK=$jdk recipes=$recipes" >&2
-  JDK=$jdk mvn -B -ntp "$PLUGIN:run" \
+  JDK=$jdk JAVA_HOME="$(_jh $jdk)" $MVN -B -ntp "$PLUGIN:run" \
     "-Drewrite.activeRecipes=$recipes" \
     "-Drewrite.recipeArtifactCoordinates=$COORDS"
   local rc=$?
@@ -54,6 +58,6 @@ run_recipe() {
 # the lombok recipe is the reactor-root rewrite.yml; OpenRewrite auto-discovers it for every module (no container-mount assumption).
 run_recipe_yml 8 "rewrite.yml" lombok_safe_bump smoke.bump.lombok_safe_bump || exit $?
 run_recipe 11 org.openrewrite.java.migrate.Java8toJava11 java8_to_java11 || exit $?
-java11_compat.sh . || true
+"$SCRIPT_DIR/java11_compat.sh" . || true
 
 echo "=== bump_8_to_11 complete" >&2
