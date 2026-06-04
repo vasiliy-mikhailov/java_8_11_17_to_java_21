@@ -21,20 +21,31 @@ PLUGIN="org.openrewrite.maven:rewrite-maven-plugin:6.40.0"
 #    like JAXB/activation are silently skipped — a direct edit is unconditional + reliable.)
 echo "=== [ee_compat] adding Java-EE-removed deps" >&2
 python3 - <<'PY'
-import glob
+import glob, re
 deps=[("javax.xml.bind","jaxb-api","2.3.1",""),("org.glassfish.jaxb","jaxb-runtime","2.3.1","runtime"),
       ("com.sun.activation","javax.activation","1.2.0","runtime"),("javax.annotation","javax.annotation-api","1.3.2",""),
       ("javax.xml.ws","jaxws-api","2.3.1","")]
-poms=[p for p in sorted(set(glob.glob("pom.xml")+glob.glob("*/pom.xml")+glob.glob("*/*/pom.xml")), key=len)
-      if "<dependencies>" in open(p).read()]
-for p in poms[:1]:                       # shallowest pom that declares <dependencies>
-    s=open(p).read(); add=""
+poms=sorted(set(glob.glob("pom.xml")+glob.glob("*/pom.xml")+glob.glob("*/*/pom.xml")), key=len)
+root=poms[0] if poms else None     # shallowest = root/parent; a parent's <dependencies> are inherited by every module
+if root:
+    s=open(root).read(); add=""
     for g,a,v,sc in deps:
         if a not in s:
             add+="<dependency><groupId>%s</groupId><artifactId>%s</artifactId><version>%s</version>%s</dependency>"%(
                  g,a,v,("<scope>%s</scope>"%sc if sc else ""))
     if add:
-        open(p,"w").write(s.replace("<dependencies>","<dependencies>"+add,1)); print("added EE deps to "+p)
+        # Inject into a REAL top-level <dependencies> (NOT one inside <dependencyManagement>, which
+        # only version-manages and never adds the dep — that left jaxb-api inert in reactor parents
+        # whose first <dependencies> is the dependencyManagement one). Create a top-level block if none.
+        dm=[(m.start(),m.end()) for m in re.finditer(r"<dependencyManagement>.*?</dependencyManagement>", s, flags=re.S)]
+        pos=next((m.end() for m in re.finditer(r"<dependencies>", s) if not any(a<=m.start()<b for a,b in dm)), None)
+        if pos is not None:
+            s=s[:pos]+add+s[pos:]
+        else:
+            block="<dependencies>"+add+"</dependencies>"
+            if "</dependencyManagement>" in s: s=s.replace("</dependencyManagement>","</dependencyManagement>"+block,1)
+            elif "</project>" in s: s=s.replace("</project>",block+"</project>",1)
+        open(root,"w").write(s); print("added EE deps to "+root)
 PY
 
 # 2. Jadira java.version surefire override (only if jadira present)
