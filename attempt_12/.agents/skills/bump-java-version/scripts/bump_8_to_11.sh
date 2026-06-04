@@ -36,7 +36,7 @@ EOF
 run_recipe_yml() {
   local jdk=$1 yml=$2 label=$3 recipe_name=$4
   echo "=== [$label] JDK=$jdk yml=$yml" >&2
-  JDK=$jdk JAVA_HOME="$(_jh $jdk)" $MVN -B -ntp "$PLUGIN:run" \
+  JDK=$jdk JAVA_HOME="$(_jh $jdk)" $MVN -B -ntp -Denforcer.skip=true "$PLUGIN:run" \
     "-Drewrite.activeRecipes=$recipe_name" \
     "-Drewrite.recipeArtifactCoordinates=$COORDS"
   local rc=$?
@@ -47,7 +47,7 @@ run_recipe_yml() {
 run_recipe() {
   local jdk=$1 recipes=$2 label=$3
   echo "=== [$label] JDK=$jdk recipes=$recipes" >&2
-  JDK=$jdk JAVA_HOME="$(_jh $jdk)" $MVN -B -ntp "$PLUGIN:run" \
+  JDK=$jdk JAVA_HOME="$(_jh $jdk)" $MVN -B -ntp -Denforcer.skip=true "$PLUGIN:run" \
     "-Drewrite.activeRecipes=$recipes" \
     "-Drewrite.recipeArtifactCoordinates=$COORDS"
   local rc=$?
