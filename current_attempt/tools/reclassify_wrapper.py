@@ -5,7 +5,7 @@ Rewrites feedback.jsonl from scratch (one outer entry per stage).
 """
 import os, json, re, time
 
-A = '/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+A = '/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 
 def max_pom_version_from_diff(diff_text):
     # Look for added (+) lines with java.version or maven.compiler.{release,source,target}

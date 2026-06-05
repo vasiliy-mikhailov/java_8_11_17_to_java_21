@@ -4,9 +4,9 @@ summary-only'). Tails per-rung dialogues, distills SIGNAL events and appends to 
 which Vector auto-captures (/host-tmp/*.log). Primes to EOF so only NEW agent behaviour is emitted.
 Usage: agent_stream.py [tick=8]"""
 import glob, os, re, time, sys, json, collections
-ROOT='/home/vmihaylov/java_8_11_17_to_java_21/active_attempt/per_repo_iter'
+ROOT='/home/vmihaylov/java_8_11_17_to_java_21/current_attempt/per_repo_iter'
 OUT='/tmp/agent_events.log'
-STATE='/home/vmihaylov/java_8_11_17_to_java_21/active_attempt/telemetry/agent_stream.state.json'
+STATE='/home/vmihaylov/java_8_11_17_to_java_21/current_attempt/telemetry/agent_stream.state.json'
 PATS=[(re.compile(r'BAIL:([A-Z][A-Z0-9_]+)'),'BAIL'),
       (re.compile(r'\[ERROR\].{0,80}?(cannot find symbol|COMPILATION ERROR|BUILD FAILURE|Could not (?:find|resolve)[^\n]{0,50}|no POM in this directory)',re.I),'ERROR'),
       (re.compile(r'(NoSuchFieldError|NoClassDefFound|ClassNotFound|invalid (?:source|target) release|is a preview feature|Unsupported class file major version)'),'ERROR'),

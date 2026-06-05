@@ -5,7 +5,7 @@ NOT already in dataset-repos.json or the lineage backlog, for verify_green2.py -
 Token read from $GITHUB_TOKEN (pass via:  GITHUB_TOKEN=$(gh auth token) python3 ...)."""
 import os, json, time, urllib.request, urllib.parse, urllib.error
 
-A = "/home/vmihaylov/java_8_11_17_to_java_21/active_attempt"
+A = "/home/vmihaylov/java_8_11_17_to_java_21/current_attempt"
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 H = {"Accept": "application/vnd.github+json", "User-Agent": "claude-disco"}
 if TOKEN:

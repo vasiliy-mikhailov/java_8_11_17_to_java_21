@@ -16,13 +16,13 @@ for ln in open('/home/vmihaylov/java_8_11_17_to_java_21/.env'):
 if len(sys.argv) != 2:
     print(__doc__); sys.exit(2)
 slug = sys.argv[1]
-# Default: read FAIL observations from active_attempt (current Qwen partial-info baseline).
+# Default: read FAIL observations from current_attempt (current Qwen partial-info baseline).
 # Override via OH_TRAJ_DIR for ad-hoc replays of older attempts.
 TRAJ_DIR = os.environ.get('OH_TRAJ_DIR',
-                          '/home/vmihaylov/java_8_11_17_to_java_21/active_attempt/per_repo_iter')
+                          '/home/vmihaylov/java_8_11_17_to_java_21/current_attempt/per_repo_iter')
 TRAJ = f'{TRAJ_DIR}/{slug}/trajectory.json'
-# Findings persist under active_attempt/investigator_findings/<slug>.json.
-FINDINGS_DIR = '/home/vmihaylov/java_8_11_17_to_java_21/active_attempt/investigator_findings'
+# Findings persist under current_attempt/investigator_findings/<slug>.json.
+FINDINGS_DIR = '/home/vmihaylov/java_8_11_17_to_java_21/current_attempt/investigator_findings'
 os.makedirs(FINDINGS_DIR, exist_ok=True)
 t = json.load(open(TRAJ))
 stage = t['stage']

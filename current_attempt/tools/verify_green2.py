@@ -26,7 +26,7 @@ def arg(n, d):
             return a.split("=", 1)[1]
     return d
 
-A = "/home/vmihaylov/java_8_11_17_to_java_21/active_attempt"
+A = "/home/vmihaylov/java_8_11_17_to_java_21/current_attempt"
 TARGET = int(arg("--target", "78")); WORKERS = int(arg("--workers", "10"))
 JVSEL = arg("--jv", "both"); MAXBUILD = int(arg("--maxbuild", "5")); SCANCAP = int(arg("--scancap", "120"))
 OUT = arg("--out", "/tmp/verify_green.jsonl"); EXTRA = arg("--extra", "")

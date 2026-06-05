@@ -7,7 +7,7 @@ For ONE slug:
      condenser configured (ff #7), event sink to /var/log/observe/openhands.jsonl.
   4. Post-test: docker_phase build under jv_to -> parse surefire -> post_pass set.
   5. Score: check_test_conservation(pre_pass, post_pass).
-  6. Write trajectory.json under active_attempt/per_repo_iter/<slug>/ with the
+  6. Write trajectory.json under current_attempt/per_repo_iter/<slug>/ with the
      attempt schema (agent runtime + backend + prompt fingerprint + event-
      stream summary + verdict + failure observation + wall + diff vs sha_from).
 
@@ -30,7 +30,7 @@ from test_conservation import (  # noqa: E402
     parse_surefire_dir, check_test_conservation, fmt_regression, clear_surefire,
 )
 
-ACTIVE = f'{BASE}/active_attempt'                 # operator-moved pointer to the open attempt
+ACTIVE = f'{BASE}/current_attempt'                 # operator-moved pointer to the open attempt
 ATTEMPT_NAME = os.path.basename(os.path.realpath(ACTIVE))
 SKILLS_DIR = f'{ACTIVE}/.agents/skills'   # bump-java-version skill -> agent_context (trigger-less = always active)
 TRAJ_DIR = f'{ACTIVE}/per_repo_iter'

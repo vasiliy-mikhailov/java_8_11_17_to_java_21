@@ -12,7 +12,7 @@ polls until all DONE markers, runs persistence wrapper on each. Logs to /tmp/cor
 """
 import os, sys, json, subprocess, time, glob, xml.etree.ElementTree as ET
 
-ATTEMPT_DIR = '/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+ATTEMPT_DIR = '/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 PROMPT_PATH = f'{ATTEMPT_DIR}/prompt.md'
 FEEDBACK_JSONL = f'{ATTEMPT_DIR}/feedback.jsonl'
 PLAN = '/tmp/corpus_batch_plan.json'

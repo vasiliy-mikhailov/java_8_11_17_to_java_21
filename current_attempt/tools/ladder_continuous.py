@@ -5,7 +5,7 @@ to feedback_p3_iter.jsonl (stage = <plan_slug>__iter1). Skips datapoints already
 Usage: ladder_continuous.py [N=8] [max_new=99999]
 """
 import os, sys, json, subprocess, time, re
-T = '/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+T = '/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 PLAN = '/tmp/corpus_batch_plan.json'
 FB = f'{T}/feedback_p3_iter.jsonl'
 LADDER = f'{T}/tools/ladder_one.sh'

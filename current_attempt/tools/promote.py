@@ -4,7 +4,7 @@ Appends /tmp/verify_green.jsonl baselines to dataset-shas.json (dedup by repo+sh
 and any brand-new repos to dataset-repos.json. Reports the rebalanced hop counts.'''
 import json
 from collections import Counter
-A='/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+A='/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 green=[json.loads(l) for l in open('/tmp/verify_green.jsonl') if l.strip()]
 shas=json.load(open(A+'/dataset-shas.json'))
 have={(d['repo'],d['sha']) for d in shas}

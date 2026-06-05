@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Full active-attempt sweep: oh_drive (OH+Qwen, the production rung) over every datapoint
-in active_attempt/dataset-shas.json. K workers, skip-if-done (trajectory exists), reap each
+in current_attempt/dataset-shas.json. K workers, skip-if-done (trajectory exists), reap each
 oh_drive workdir after its run (per-run reap discipline), tally corpus PASS rate.
 Usage: corpus_sweep.py [workers]"""
 import json, os, re, subprocess, sys, time
@@ -8,7 +8,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE = "/home/vmihaylov/java_8_11_17_to_java_21"
-ACTIVE = f"{BASE}/active_attempt"
+ACTIVE = f"{BASE}/current_attempt"
 OH = f"{ACTIVE}/tools/oh_drive.py"
 DS = f"{ACTIVE}/dataset-shas.json"
 OUT = f"{ACTIVE}/per_repo_iter"

@@ -24,7 +24,7 @@ for ln in open('/home/vmihaylov/java_8_11_17_to_java_21/.env'):
     k, v = ln.split('=', 1); v = v.strip().strip('"').strip("'")
     os.environ.setdefault(k, v)
 
-ATTEMPT_DIR = "/home/vmihaylov/java_8_11_17_to_java_21/active_attempt"
+ATTEMPT_DIR = "/home/vmihaylov/java_8_11_17_to_java_21/current_attempt"
 PROMPT_PATH = f"{ATTEMPT_DIR}/.agents/skills/bump-java-version/SKILL.md"
 MAX_TURNS = 80
 MAX_ACTION_OUTPUT = 8000  # cap on what Qwen SEES per tool result (context budget); full output is still logged

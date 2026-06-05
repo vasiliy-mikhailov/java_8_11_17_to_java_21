@@ -4,7 +4,7 @@ clusters + stuck rungs + resource spikes, with ALERT flags. Sources: feedback_p3
 ladder_continuous.log, live load/mem/disk/nvidia-smi. Prints + appends telemetry/sweep_digest.jsonl.
 Usage: sweep_digest.py [loop [secs]]"""
 import json, collections, subprocess, time, os, re, sys
-T='/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+T='/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 FB=f'{T}/feedback_p3_iter.jsonl'; MGR='/tmp/ladder_continuous.log'; NPROC=24
 def sh(c):
     try: return subprocess.run(c,shell=True,capture_output=True,text=True,timeout=12).stdout.strip()

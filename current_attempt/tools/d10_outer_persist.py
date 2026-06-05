@@ -14,7 +14,7 @@ baseline separately for a real PASS verdict). Otherwise expects a JSON file with
 import os, sys, json, hashlib, shutil, subprocess, time, glob, re
 import xml.etree.ElementTree as ET
 
-ATTEMPT_DIR = '/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+ATTEMPT_DIR = '/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 PROMPT_PATH = f'{ATTEMPT_DIR}/prompt.md'
 RECIPE_JAR = '/home/vmihaylov/.m2-fitness/repository/com/claude/recipes/bump-java-version-recipes/1.0.0/bump-java-version-recipes-1.0.0.jar'
 FEEDBACK_JSONL = f'{ATTEMPT_DIR}/feedback.jsonl'

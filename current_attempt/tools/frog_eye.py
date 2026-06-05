@@ -6,7 +6,7 @@ changes-in-agents that did-not-happen-before (new error/bail signature, agent LO
 plus secondary stall/load spikes, by 10s/60s/5m/30m contrast. Silent on steady state; emit-on-edge.
 Output: telemetry/frog_eye.jsonl + stdout. Usage: frog_eye.py [tick=10]"""
 import json, collections, time, os, re, sys, subprocess
-OBS='/var/log/observe'; T='/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'; OUT=f'{T}/telemetry/frog_eye.jsonl'
+OBS='/var/log/observe'; T='/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'; OUT=f'{T}/telemetry/frog_eye.jsonl'
 def shtail(path,n):
     try: return subprocess.run(['tail','-n',str(n),path],capture_output=True,text=True,timeout=10).stdout.splitlines()
     except Exception: return []

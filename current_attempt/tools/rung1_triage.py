@@ -5,7 +5,7 @@ production agent won't apply. Reads sweep_results.json + per_repo_iter/<slug>/lo
 Usage: rung1_triage.py [results.json]"""
 import json, os, re, sys, collections
 
-ACTIVE = "/home/vmihaylov/java_8_11_17_to_java_21/active_attempt"
+ACTIVE = "/home/vmihaylov/java_8_11_17_to_java_21/current_attempt"
 RES = sys.argv[1] if len(sys.argv) > 1 else ACTIVE + "/sweep_results.json"
 OUT = ACTIVE + "/per_repo_iter"
 

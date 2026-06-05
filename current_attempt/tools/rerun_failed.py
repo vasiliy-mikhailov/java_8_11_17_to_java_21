@@ -1,5 +1,5 @@
 import subprocess, time, sys
-T='/home/vmihaylov/java_8_11_17_to_java_21/active_attempt'
+T='/home/vmihaylov/java_8_11_17_to_java_21/current_attempt'
 N=int(sys.argv[1]) if len(sys.argv)>1 else 8
 jobs=[l.split('\t') for l in open('/tmp/failed_oh.tsv').read().splitlines() if l.strip()]
 LOG='/tmp/rerun_failed.log'
