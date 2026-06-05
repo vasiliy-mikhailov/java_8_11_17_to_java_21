@@ -3,11 +3,9 @@
 The failure-remedy table in `SKILL.md` calls custom OpenRewrite recipes by FQN. They ship as
 one Maven artifact (a dependency, not bundled source):
 
-**Coordinate:** `tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0`
+**Coordinate:** `io.github.vasiliy-mikhailov:bump-java-version-recipes:1.0.0`
 
 **Recipe FQNs** (used as `-Drewrite.activeRecipes=…`):
-- `tech.mikhailov.bump_java_version_recipes.RewriteWebSecurityConfigurerAdapterToFilterChain`
-- `tech.mikhailov.bump_java_version_recipes.WidenHttpStatusToHttpStatusCode`
 - `tech.mikhailov.bump_java_version_recipes.AddSecurityConfigImportForWebMvcTest`
 - `tech.mikhailov.bump_java_version_recipes.ScopeAuthenticationEntryPointToApiForOAuth2Login`
 
@@ -16,7 +14,7 @@ one Maven artifact (a dependency, not bundled source):
 ```
 JDK=<jv_to> mvn -B -ntp org.openrewrite.maven:rewrite-maven-plugin:6.40.0:run \
   -Drewrite.activeRecipes=<RECIPE_FQN> \
-  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes:1.0.0
+  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.35.0,io.github.vasiliy-mikhailov:bump-java-version-recipes:1.0.0
 ```
 
 **Building the catalog:** the source is the `recipes/` Maven module at `active_attempt/recipes/`.
@@ -26,8 +24,9 @@ Install it into the local Maven cache the bump scripts read from:
 cd active_attempt/recipes && JDK=17 mvn -q -B -ntp clean install
 ```
 
-It is **not** published to Maven Central / the Nexus mirror — it lives only in the local `.m2`
-cache that the `mvn` wrapper bind-mounts, so a consumer must build+install it once.
+It is published to Maven Central as `io.github.vasiliy-mikhailov:bump-java-version-recipes:1.0.0`;
+the bump scripts and `mvn` wrapper resolve it from the local `.m2` cache (warmed from Central),
+so no manual build+install is required.
 
 # Environment the scripts assume
 

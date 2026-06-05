@@ -11,7 +11,7 @@ _jh(){ local v="JAVA_HOME_$1"; printf "%s" "${!v:-${JDK_HOME_BASE:-/opt/jdk}/$1}
 MVN="${MVN:-$(command -v mvn >/dev/null 2>&1 && echo mvn || { [ -x ./mvnw ] && echo ./mvnw || echo mvn; })}"
 
 
-COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0,io.github.vasiliy-mikhailov:bump-java-version-recipes:1.0.0"
+COORDS="org.openrewrite.recipe:rewrite-migrate-java:3.35.0"
 PLUGIN="org.openrewrite.maven:rewrite-maven-plugin:6.40.0"
 
 # Workdir-local lombok safe-bump rewrite.yml (visible inside docker at rewrite.yml).
