@@ -69,3 +69,56 @@ JDK=<jv_to> mvn -B -ntp org.openrewrite.maven:rewrite-maven-plugin:6.40.0:run \
 
 ## When to bail
 If after running the bump script + applying every matching fix the build still won't compile or tests still regress vs `BASELINE_PASS`, state which step failed and the unresolved `[ERROR]` (with the bail label if the table prescribes one). Do not invent edits. **When you bail, emit the label on its own line as the final line of your message in the exact form `BAIL:<LABEL>` (uppercase, no backticks, no markdown bold) — e.g. `BAIL:SB2_BOM_NEEDS_SB3_BUMP`.**
+
+## How the bump works (reference — background, not steps to run)
+
+You only ever run `bump_<jv_from>_to_<jv_to>.sh .` (Step 3) and then consult the failure
+table. This section explains what that one script does, so none of it is a black box. There
+are exactly **two layers of branching**: (1) inside the script — fixed per-hop, the only
+variation is which JDK each step uses; (2) across scripts — the failure-table escalations you
+apply by hand. The script itself never reads project content and never branches on it.
+
+**Inside `bump_<from>_to_<to>.sh`** — a linear pipeline, every step dispatched through the
+`mvn` docker wrapper with `JDK=<n>` chosen per step:
+
+```
+1. lombok_safe_bump   JDK=jv_from   Pin Lombok >= 1.18.30 via a temp rewrite.yml
+                                     (UpgradeDependencyVersion + ChangePropertyValue for 5
+                                     property-name spellings). Old Lombok crashes javac 17/21
+                                     (NoSuchFieldError JCTree$JCImport.qualid), so this MUST
+                                     run under the OLD JDK before any newer-JDK step.
+
+2. migrate recipes    (public org.openrewrite.recipe:rewrite-migrate-java:3.35.0)
+     8->11    Java8toJava11                                              JDK=11
+     11->17   UpgradePluginsForJava17 (JDK=11)  ->  UpgradeBuildToJava17 (JDK=17)
+     17->21   UpgradePluginsForJava21 (JDK=17)  ->  UpgradeBuildToJava21 (JDK=21)
+              ->  transforms21 (JDK=21): 8 source recipes — illegal-semicolons, Thread.stop,
+                  URL-ctor->URI.create, SequencedCollection, Locale.of, Runtime.exec,
+                  delete-finalize, removed-Subject-methods.
+
+3. compat layer       Deterministic pom/surefire edits, best-effort (a failure here is
+                      non-fatal — the script continues):
+     8->11    java11_compat.sh   Re-add the EE modules JDK 11 removed (jaxb-api, jaxb-runtime,
+                                 javax.activation, javax.annotation-api, jaxws-api) into a real
+                                 top-level <dependencies>; if Jadira usertype is present, set
+                                 surefire java.version=1.8.0; bump old maven-jar/war/assembly
+                                 plugins to JDK-11-aware versions.
+     11->17   java17_compat.sh   Inject the --add-opens set into surefire <argLine> (JDK 16+
+     17->21                      strong-encapsulation closes reflection old Mockito/ByteBuddy
+                                 need); bump old JaCoCo to 0.8.12 (old ASM can't read 17/21).
+```
+
+Everything situational lives in the **failure table** above — that is the second branch layer,
+and it is the agent's decision, not the script's:
+
+- **Spring Boot 1.x** (runtime won't start on JDK 11+) → reset, `sb1_to_sb2.sh`
+  (`UpgradeSpringBoot_2_7`), then re-run the bump.
+- **Spring Boot 2 BOM too old for JDK 21** (`major version 65`, ByteBuddy/ASM) → try the
+  ByteBuddy `<dependencyManagement>` override first; if it persists → reset, `sb2_to_sb3.sh`
+  (`UpgradeSpringBoot_3_3`, which also runs the official Spring Security 6 / javax->jakarta
+  migration), then re-run the bump.
+- **Everything else** — per-symptom pom edits and the two niche `rewrite:run` security recipes
+  — are the individual rows.
+
+So the whole decision tree is: run the linear bump; on a failure, match exactly one row, apply
+it, re-run from the failed step; only the two Spring-Boot rows re-route through a second script.
