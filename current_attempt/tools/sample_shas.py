@@ -14,7 +14,7 @@ Output: current_attempt/dataset-shas.json = [{repo, sha, jv_from, jv_to, attempt
 """
 import json, subprocess, sys, os, random
 A = "/home/vmihaylov/java_8_11_17_to_java_21/current_attempt"
-NEXT = {8: 11, 11: 17, 17: 21}  # bumpable LTS -> next LTS
+NEXT_ALL = {8: 11, 11: 17, 17: 21, 21: 25}  # bumpable LTS -> next LTS
 
 def arg(n, d=None):
     for a in sys.argv:
@@ -27,6 +27,8 @@ MAX_ATTEMPTS = int(arg("--max-attempts", "10"))   # max COMPILE attempts per rep
 SCAN_CAP = int(arg("--scan-cap", "150"))          # max commits inspected for eligibility (cheap)
 LIMIT = arg("--limit"); REPOS_OVERRIDE = arg("--repos")
 REPOS_FILE = arg("--repos-file"); OUT = arg("--out")
+ONLY = arg("--only-from")  # restrict to a single jv_from (e.g. 21 for the 21->25 sweep)
+NEXT = {int(ONLY): NEXT_ALL[int(ONLY)]} if ONLY else NEXT_ALL
 if REPOS_FILE:
     REPOS = [r.strip() for r in open(REPOS_FILE) if r.strip()]
 elif REPOS_OVERRIDE:
@@ -46,7 +48,7 @@ def sh(c, to=300):
 def detect_jv(wd):
     out = sh("grep -rhoE '<(maven.compiler.release|java.version|maven.compiler.target|release|source)>[0-9]+' "
              + wd + " --include=pom.xml 2>/dev/null | grep -oE '[0-9]+'").stdout.split()
-    vs = [int(x) for x in out if x.isdigit() and int(x) in (8, 11, 17, 21)]
+    vs = [int(x) for x in out if x.isdigit() and int(x) in (8, 11, 17, 21, 25)]
     return max(vs) if vs else None
 
 out = []

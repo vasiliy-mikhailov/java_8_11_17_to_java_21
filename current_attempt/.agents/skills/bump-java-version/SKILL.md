@@ -1,11 +1,11 @@
 ---
 name: bump-java-version
-description: Migrate a Maven project from one Java LTS to the next (8->11, 11->17, 17->21) so it still compiles under the new JDK and previously-passing tests still pass — by hand, using only standard tools (JDKs, Maven, and OpenRewrite recipes from Maven Central; no project-specific scripts). Use when upgrading or bumping the Java version of a Maven project, modernizing to a newer JDK or LTS, or performing the Spring Boot 1->2 / 2->3 and javax->jakarta migration that a Java upgrade requires.
+description: Migrate a Maven project from one Java LTS to the next (8->11, 11->17, 17->21, 21->25) so it still compiles under the new JDK and previously-passing tests still pass — by hand, using only standard tools (JDKs, Maven, and OpenRewrite recipes from Maven Central; no project-specific scripts). Use when upgrading or bumping the Java version of a Maven project, modernizing to a newer JDK or LTS, or performing the Spring Boot 1->2 / 2->3 and javax->jakarta migration that a Java upgrade requires.
 ---
 
 # Bumping a Maven project one Java LTS step — by hand
 
-Migrate a Maven project **one** Java LTS step (8→11, 11→17, or 17→21) so it **compiles** under the
+Migrate a Maven project **one** Java LTS step (8→11, 11→17, 17→21, or 21→25) so it **compiles** under the
 new JDK and every test that **passed before still passes**. Uses only standard tools — **JDKs,
 Maven, and OpenRewrite** (recipes pulled from Maven Central). No project-specific scripts.
 
@@ -23,6 +23,7 @@ Do **one** step at a time (8→17 = do 8→11 fully green, then 11→17).
 
 Versions used below are known-good; newer point releases are fine:
 - rewrite-maven-plugin `6.40.0`, `rewrite-migrate-java` `3.35.0`, `rewrite-spring` `6.31.0`.
+- For the **21→25** hop use `rewrite-maven-plugin` `6.41.0` + `rewrite-migrate-java` `3.36.0` — these carry the Java-25 recipes (`UpgradeBuildToJava25`, `UpgradePluginsForJava25`).
 
 ---
 
@@ -67,6 +68,18 @@ JAVA_HOME=<jdk_to> mvn -B -ntp -U -Denforcer.skip=true \
 1. `org.openrewrite.java.migrate.UpgradePluginsForJava21`
 2. `org.openrewrite.java.migrate.UpgradeBuildToJava21`
 
+**21 → 25** — in order. This hop needs the newer artifacts (`rewrite-maven-plugin:6.41.0` +
+`rewrite-migrate-java:3.36.0`), which ship the Java-25 recipes; run with **JDK 25** as `<jdk_to>`:
+1. `org.openrewrite.java.migrate.UpgradePluginsForJava25`
+2. `org.openrewrite.java.migrate.UpgradeBuildToJava25`
+
+```bash
+JAVA_HOME=<jdk_to> mvn -B -ntp -U -Denforcer.skip=true \
+  org.openrewrite.maven:rewrite-maven-plugin:6.41.0:run \
+  -Drewrite.activeRecipes=org.openrewrite.java.migrate.UpgradeBuildToJava25 \
+  -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-migrate-java:3.36.0
+```
+
 > **If the OpenRewrite step itself fails to compile** (it type-attributes by compiling, e.g.
 > `package javax.xml.bind does not exist`): either apply the **EE-deps fix from §4 first**, or run
 > the recipe under the **OLD** JDK (`JAVA_HOME=<jdk_from>`), where the project still compiles — then
@@ -94,7 +107,7 @@ And if the effective `maven-surefire-plugin` is **≤ 2.21** (old Spring Boot pa
 set `<maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>` in `<properties>` — it
 NPEs under JDK 9+ otherwise.
 
-**For 11→17 and 17→21** — the test fork needs strong-encapsulation opened. Add to the
+**For 11→17, 17→21, and 21→25** — the test fork needs strong-encapsulation opened. Add to the
 `maven-surefire-plugin` `<configuration>` an `<argLine>` with:
 ```
 --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED
@@ -104,7 +117,7 @@ NPEs under JDK 9+ otherwise.
 --add-opens java.desktop/java.awt.font=ALL-UNNAMED --add-opens java.management/java.lang.management=ALL-UNNAMED
 ```
 (preserve any existing `<argLine>`, e.g. JaCoCo's `@{argLine}`). And if JaCoCo is pinned at an old
-version, bump `jacoco-maven-plugin` to **0.8.12** (older ASM can't read class-file major 61/65).
+version, bump `jacoco-maven-plugin` to **0.8.12** (JDK 17/21) — or **0.8.13+** for JDK 25; older ASM can't read class-file major 61/65/69.
 
 ---
 
@@ -145,7 +158,7 @@ This also performs the javax→jakarta and Spring Security 6 migrations.
 | `package javax.xml.bind… does not exist`, `XmlTransient`, `JAXBException`, `javax/annotation/Generated` | EE modules removed in JDK 11 | The §4 EE deps. **If during annotation processing** (`<annotationProcessorPaths>` present): regular deps aren't on the processor path — add `jaxb-api` + `javax.annotation-api` as `<path>` entries inside `<annotationProcessorPaths>` too. |
 | `maven-surefire-plugin:2.20/2.21 … NullPointerException` | surefire ≤ 2.21 broken on JDK 9+ | Force surefire **2.22.2+** (pom version, or `<maven-surefire-plugin.version>2.22.2</…>` if BOM-pinned). |
 | `Cannot define class using reflection` / `sun.misc.Unsafe.defineClass` / `MockitoException` (often then `OutOfMemoryError`) | old Mockito's shaded ByteBuddy uses removed `sun.misc.Unsafe` | Bump **Mockito** (not byte-buddy — it's shaded). Add **before** any BOM import in `<dependencyManagement>`: `org.mockito:mockito-core:2.23.4` + `org.objenesis:objenesis:3.2`. (Match the newest patch if the tests use the Mockito 3/4/5 API.) |
-| `ASM ClassReader failed to parse` / `Unsupported class file major version 61/65` | ByteBuddy/ASM too old for JDK 17/21 | Light: dM `net.bytebuddy:byte-buddy(:agent):1.14.12`. If it's Spring's component-scan ASM (Spring 5.2.x / SB 2.0–2.1): do the **SB 2→3** upgrade (§6) instead. |
+| `ASM ClassReader failed to parse` / `Unsupported class file major version 61/65/69` | ByteBuddy/ASM too old for JDK 17/21/25 | Light: dM `net.bytebuddy:byte-buddy(:agent):1.14.12` (JDK 17/21; use the newest 2025+ release for JDK 25). If it's Spring's component-scan ASM (Spring 5.2.x / SB 2.0–2.1): do the **SB 2→3** upgrade (§6) instead. |
 | `ArrayIndexOutOfBoundsException: Index 1 out of bounds for length 1` from a `<clinit>` (Jadira; Hibernate Validator 5.x → "Failed to load ApplicationContext") | old lib parses `java.version`/`java.specification.version` as legacy `1.x` | Don't pass `-Djava.version=<major>` (let the JVM report its real version). If it's Hibernate Validator 5.x, bump it (`hibernate-validator` 6.2.5.Final). |
 | `Error injecting JarArchiver` / `ExceptionInInitializerError at JarArchiver.<init>` | old `maven-jar/war/assembly` plexus-archiver predates JDK 11 | Bump the plugin (`maven-jar-plugin ≥ 3.4.1`) or dM `org.codehaus.plexus:plexus-archiver:4.2.7`. |
 | `com.sun:tools:jar` not found / `tools.jar` systemPath | `tools.jar` removed in JDK 9 | Delete the `com.sun:tools` system-scoped dependency. If code uses `com.sun.tools.javac.*`: add `--add-exports jdk.compiler/com.sun.tools.javac.*=ALL-UNNAMED` to `maven-compiler-plugin` `<compilerArgs>` **and** surefire `<argLine>`, and use `<source>/<target>` (NOT `<release>`). |
