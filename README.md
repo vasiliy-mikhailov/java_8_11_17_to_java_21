@@ -11,6 +11,7 @@ The primary recipe dominanta (Dominanta 2) has evolved across attempts:
 - **Attempts 1–7** treated the recipe as an OpenRewrite chain — a list of `(label, jdk, recipes)` steps the harness applies in sequence and validates after each step. The proposer was Qwen, the harness ran OpenRewrite primitives, and per-repo iteration mutated the chain on failure.
 - **Attempts 8–9** kept the chain model but extended Qwen's primitive set with custom claude-recipes (WSCA, HttpStatusCode widening, oauth2Login scoping, security-config import for `@WebMvcTest`) and a richer observation library. Per-repo iteration ran multi-pass round-robin with K=5 attempts per stage per pass.
 - **Attempt 10** drops the chain model entirely. The artifact Dominanta 2 evaluates is now a paste-into-any-coding-agent prompt (`attempt_10/prompt.md`); the agent runtime (Dominanta 7) drives the migration end-to-end using its own file / grep / shell / build tools, with a context-management primitive configured (condenser or delegated subagent) so deep stages don't lose trajectories. The harness wraps pre-test → agent → post-test → score; PASS criterion (compile clean on `jv_to` AND `pre_pass ⊆ post_pass`) lives in Dominanta 2's Contract.
+- **Attempts 11–14** repackage the artifact as the portable `bump-java-version` skill and harden it across a three-agent panel. Attempt 11 ships `SKILL.md` + bundled `bump_<from>_to_<to>.sh` scripts + a versioned recipe catalog; attempts 12–13 add deterministic JDK-removal compat floors (surefire, Mockito) and a unified panel harness that runs the *same* Qwen 27B headless through three unrelated off-the-shelf agents (`opencode`, `kilocode`, `openhands`) in one image (`agent_drive_one.sh`), the agent being the only variable; **attempt 14 collapses the skill to a single self-contained `SKILL.md` hand-manual** — standard tools only (JDKs, Maven, and OpenRewrite recipes from Maven Central), no bundled scripts — that the agent reads and executes step by step. The deterministic fixes the scripts used to guarantee now live as documented pom edits the agent applies by hand.
 
 Per-repo trajectories persist under `attempt_N/per_repo_iter/<slug>/trajectory.json`, so the search resumes from cached state across runs and across prompt or agent-runtime changes.
 
@@ -21,10 +22,10 @@ The baseline every repo is measured against is the one-shot `org.openrewrite.jav
 ```mermaid
 xychart-beta
     title "Recipe pass rate by attempt"
-    x-axis ["a1 (4-repo smoke)", "a3 (271 repos)", "a4 (271 repos)", "a6 (494 stages)", "a7 (395 stages)", "a8 (202 stages)", "a9_v3 (187/202)", "a10 (431 clean)", "a11 (412 clean)"]
+    x-axis ["a1 (4-repo smoke)", "a3 (271 repos)", "a4 (271 repos)", "a6 (494 stages)", "a7 (395 stages)", "a8 (202 stages)", "a9_v3 (187/202)", "a10 (431 clean)", "a11 (412 clean)", "a14 (panel 10x3)"]
     y-axis "PASS rate (%)" 0 --> 100
-    bar [25, 56, 68, 71, 91, 80, 72, 83, 96]
-    line [25, 56, 68, 71, 91, 80, 72, 83, 96]
+    bar [25, 56, 68, 71, 91, 80, 72, 83, 96, 96]
+    line [25, 56, 68, 71, 91, 80, 72, 83, 96, 96]
 ```
 
 Each attempt's champion against the corpus available at the time:
@@ -40,6 +41,7 @@ Each attempt's champion against the corpus available at the time:
 | 9\_v3 | attempt 8 baseline + extended observation library + 4 claude-recipes (WSCA, oauth2Login, WidenHttpStatusToHttpStatusCode, AddSecurityConfigImportForWebMvcTest) | 202 stages (187 processed) | 72 % (135/187) | **regression vs a8 — enriching library past a point hurts; Qwen overcommits without ground truth** |
 | 10 | paste-into-any-coding-agent prompt (`attempt_10/prompt.md`) driven by OpenHands SDK + Qwen 3.6 27B FP8 + LLMSummarizingCondenser | 477 (431 clean) | **75.1%** raw (358/477); **83.1%** clean (358/431, after excluding 46 unmigratable junk baselines); **≈96.5%** with hardened prompt + recovery (416/431) | corpus de-noising + recovery — most "failure" was bad baselines, not migration failure (full detail: `attempt_10/README.md`) |
 | 11 | artifact repackaged as the `bump_java_version` **skill** (`.agents/skills/bump_java_version/`: SKILL.md + scripts + recipes); catalog de-branded to `tech.mikhailov.bump_java_version_recipes:bump-java-version-recipes`; `mvn` wrapper runs non-root (uid 1000) | 412 clean (20 junk dropped) | **95.6%** clean (394/412) · 94.2% raw (407/432) · **96.4%** with rung-1 escalation | first apples-to-apples fresh sweep; corpus re-audited (checkout sha-correct) + slugs renamed `owner_repo_<sha>`; rung-1 (Claude+Opus) recovers 3 of 18 fails; validated on 2 datapoints × 3 rungs (all PASS); baseline before GEPA/EvoSkills (full detail: `attempt_11/README.md`) |
+| 14 | manual-only `bump-java-version` skill — one self-contained `SKILL.md` (standard-tools hand manual: JDKs + Maven + OpenRewrite from Maven Central, **no bundled scripts**), driven through the P3 three-agent panel (`opencode`/`kilocode`/`openhands`, one Qwen 27B, one harness) | 10 sha-pinned stages × 3 agents (1 `NO_BASELINE` excluded) | **96 %** panel (26/27): opencode 8/9, kilocode 9/9, openhands 9/9 — the lone opencode miss (a skipped Lombok-≥1.18.30 step) passed on retry → ≈100 % | matches the script-bundled panel (90 %) with scripts removed and no regression (snapshot: `attempt_14/`) |
 
 Numbers track Dominanta 2's reward against the one-shot baseline on the same corpus. Caveat: corpus composition changed across attempts, so absolute PASS rate is comparable within an attempt's column but not across rows.
 
@@ -76,6 +78,14 @@ java21_transforms              run under JDK 21           # 8 source transforms
 The exact recipe lists and JDK assignments live in `attempt_7/tools/run_sequenced_java.py::plan_for()`; attempt 8 inherits the same chain plus claude-recipes wired in via `fold_into:sb3`.
 
 **Attempt 10's experimental artifact** (not yet a measured winner) is the prompt at `attempt_10/prompt.md`. The harness at `attempt_10/tools/oh_drive.py` runs the prompt through an OpenHands SDK agent (Qwen 3.6 27B FP8 backend, AWQ-served condenser, event sink to `/var/log/observe/openhands.jsonl`). The agent drives the migration directly — picking recipes, applying them, fixing pre-recipe pom edits, building, iterating — rather than emitting a chain for the harness to apply.
+
+## Resulting skill
+
+The deliverable is a single, self-contained skill: `current_attempt/.agents/skills/bump-java-version/SKILL.md` (frozen snapshot under `attempt_14/`). It is a **standard-tools-only hand manual** — JDKs, Maven, and OpenRewrite recipes pulled from Maven Central — with **no bundled scripts**; any tool-using coding agent reads it and performs each numbered step itself (baseline → Lombok-safe → OpenRewrite migration → deterministic pom edits → compile + test + conserve → optional Spring Boot upgrade → troubleshooting table → bail).
+
+**Contract (PASS criterion).** A stage PASSes iff `mvn compile` succeeds under `jv_to` **and** the pre-pass test set ⊆ the post-pass test set (no previously-passing test is lost). Stage facts (repo, sha, `jv_from`, `jv_to`, workdir) are injected by the consumer's harness as a prepended header, never baked into the skill, so it stays portable across agents and harnesses.
+
+**Validation.** Driven headless by three unrelated off-the-shelf agents (`opencode`, `kilocode`, `openhands`) on the same Qwen 3.6 27B FP8 through one unified harness (`current_attempt/portability/agent_drive_one.sh`, one image, agent = only variable), the manual-only skill reaches **96 % panel PASS (26/27 scored)** on a 10-repo sha-pinned subset — opencode 89 %, kilocode 100 %, openhands 100 %. The single opencode miss was a skipped manual step (bump Lombok to ≥ 1.18.30) that passed on rerun, so removing the bundled scripts cost no pass rate versus the prior script-bundled panel.
 
 ## Repo layout
 
