@@ -16,13 +16,13 @@ SKILL = f"{ACTIVE}/.agents/skills/bump-java-version"
 CFG = f"{ACTIVE}/portability"
 DRIVE = "/home/vmihaylov/agent_drive_one.sh"
 OHRUN = "/home/vmihaylov/oh_run.py"
-OUT = f"/home/vmihaylov/sweep3_{AGENT}"
+OUT = f"/home/vmihaylov/sweep3_{AGENT}" + os.environ.get("OUT_SUFFIX", "")
 M2 = "/home/vmihaylov/.m2-fitness"
 SETTINGS = "/home/vmihaylov/maven-config/settings.xml"
 IMAGE = "bump-allagents-sweep:latest"
 OC_KEY = os.environ["OC_KEY"]
 
-ds = json.load(open(f"{ACTIVE}/dataset-shas.json"))
+ds = json.load(open(os.environ.get("DATASET_FILE", f"{ACTIVE}/dataset-shas.json")))
 byhop = defaultdict(list)
 for e in ds:
     byhop[f"{e['jv_from']}->{e['jv_to']}"].append(e)
