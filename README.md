@@ -240,7 +240,7 @@ An honest bail with the reason beats a green build that hides a dropped test.
 
 ## How this project was built — with AI
 
-This skill wasn't written by hand. An AI agent (Claude) **evolved** it across the attempts below against a corpus of real GitHub repos, via a reflective loop on a **two-rung ladder** — first Claude + Opus 4.8 (the strong rung, which separates *genuinely unfixable* from *needs a new recipe*), then the production **three-agent panel** (the same Qwen-27B through `opencode`/`kilocode`/`openhands`): draft the skill → run it down both rungs → read where it fails or the agents disagree → tighten the manual at the stronger rung so it survives the weaker → keep the change only if it doesn't regress the corpus. The full method — eleven interlocking *Problems* (P1–P11: the skill, the per-repo escalation panel, the dataset sampler, the substrate that runs it, and shipping it to the public Claude marketplace) — is specified in **[`AGENTS.md`](AGENTS.md)**; the attempt-by-attempt trajectory with per-repo results lives under **`attempt_*/`**. The baseline each repo is measured against is the one-shot `org.openrewrite.java.migrate.UpgradeToJava<jv_to>` recipe — what an unsuspecting maintainer would do.
+This skill wasn't written by hand. An AI agent (Claude) **evolved** it across the attempts below against a corpus of real GitHub repos, via a reflective loop on a **two-rung ladder** — first Claude + Opus 4.8 (the strong rung, which separates *genuinely unfixable* from *needs a new recipe*), then the production **three-agent panel** (the same Qwen-27B through `opencode`/`kilocode`/`openhands`): draft the skill → run it down both rungs → read where it fails or the agents disagree → tighten the manual at the stronger rung so it survives the weaker → keep the change only if it doesn't regress the corpus. The full method — twelve interlocking *Problems* (P1–P12: the skill, the per-repo escalation panel, the dataset sampler, the substrate that runs it, shipping it to the public skill ecosystem, and opening bump PRs in response to live GitHub requests) — is specified in **[`AGENTS.md`](AGENTS.md)**; the attempt-by-attempt trajectory with per-repo results lives under **`attempt_*/`**. The baseline each repo is measured against is the one-shot `org.openrewrite.java.migrate.UpgradeToJava<jv_to>` recipe — what an unsuspecting maintainer would do.
 
 <details>
 <summary><b>Pass rate by attempt</b> — the trajectory</summary>
@@ -280,7 +280,7 @@ Numbers track P2's reward against the one-shot baseline on the same corpus; corp
 <summary><b>Repo layout</b> &amp; infrastructure</summary>
 
 ```
-AGENTS.md                          the eleven Problems (P1–P11) — read this first
+AGENTS.md                          the twelve Problems (P1–P12) — read this first
 current_attempt/
   .agents/skills/bump-java-version/
     SKILL.md                       the deliverable — one standard-tools hand manual
@@ -332,8 +332,8 @@ reachable via SSH alias `mh` at `$HOME/java_8_11_17_to_java_21`. Write a fresh
    two-rung ladder — first Claude+Opus 4.8, then the production three-agent panel
    (opencode/kilocode/openhands on the same Qwen): draft → run it down both rungs →
    read failures/disagreement → tighten at the stronger rung so it survives the
-   weaker → keep only non-regressing changes; point to `AGENTS.md` for the full method (eleven
-   Problems P1–P11) and `attempt_*/` for the trajectory; name the one-shot
+   weaker → keep only non-regressing changes; point to `AGENTS.md` for the full method (twelve
+   Problems P1–P12) and `attempt_*/` for the trajectory; name the one-shot
    `UpgradeToJava<jv_to>` baseline. Put the detail inside collapsible <details>
    blocks: (a) "Pass rate by attempt" — a mermaid chart plus a table with ONE ROW
    PER ATTEMPT present under `attempt_*/`, none omitted, each row naming the attempt
