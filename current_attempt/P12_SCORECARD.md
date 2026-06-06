@@ -18,6 +18,7 @@ Kept in sync as PRs are opened / merged / bailed.
 | ghusta/FakeSMTP | — | [#30](https://github.com/ghusta/FakeSMTP/issues/30) | 17→21 | `java.version` 17→21 + CI JDK | 13/13 | [#50](https://github.com/ghusta/FakeSMTP/pull/50) | open |
 | sagar-arora/LogAgent | 5 | [#6](https://github.com/sagar-arora/LogAgent/issues/6) | 11→17 | compiler source/target 11→17 + CI JDK | 1/1 | [#13](https://github.com/sagar-arora/LogAgent/pull/13) | open |
 | mars-sim/mars-sim | 164 | [#1956](https://github.com/mars-sim/mars-sim/issues/1956) | 21→25 | `maven.compiler.source`/`target` 21→25 + 4 CI workflows | 721/721 | [#1959](https://github.com/mars-sim/mars-sim/pull/1959) | open |
+| agido-malter/logback-elasticsearch-appender | 24 | [#45](https://github.com/agido-malter/logback-elasticsearch-appender/issues/45) | 8→11 | compiler source/target→`release` 11 + CI JDK (gate=`mvn test`, the repo's CI; `verify` falsely fails on gpg-sign). Java-11 part only — HttpClient refactor split to a follow-up PR | 24/24 | [#48](https://github.com/agido-malter/logback-elasticsearch-appender/pull/48) | open |
 
 ## Bailed (no clean PASS → no PR, per P12 discipline)
 
@@ -31,6 +32,6 @@ Kept in sync as PRs are opened / merged / bailed.
 
 ## Tally
 
-- **10 PRs opened**, all 4 LTS hops covered (8→11, 11→17, 17→21, 21→25), every one verified green under the repo's own `mvn verify`.
+- **11 PRs opened**, all 4 LTS hops covered (8→11, 11→17, 17→21, 21→25), every one verified green under the repo's own CI command (`mvn verify`, or `mvn test` where that is the repo's actual CI gate).
 - **5 bailed** on P12 discipline (no green baseline / out of scope / unresolvable deps).
 - _Reward = merged PRs (primary)._ The feed's clean, resolvable tail is largely exhausted; re-run `find_bump_issues.py` later for fresh demand rather than grinding low-yield targets.
