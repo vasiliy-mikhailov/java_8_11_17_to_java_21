@@ -53,9 +53,17 @@ def reap(wd):
 
 
 def detect_jv(wd):
-    out = sh("grep -rhoE '<(maven.compiler.release|java.version|maven.compiler.target|release|source)>[0-9]+' "
-             + wd + " --include=pom.xml 2>/dev/null | grep -oE '[0-9]+'").stdout.split()
-    vs = [int(x) for x in out if x.isdigit() and int(x) in (8, 11, 17, 21, 25)]
+    out = sh("grep -rhoE '<(maven.compiler.release|java.version|maven.compiler.target|release|source)>[0-9][0-9.]*' "
+             + wd + " --include=pom.xml 2>/dev/null").stdout.split()
+    vs = []
+    for tok in out:
+        num = tok.split(">")[-1]                         # '1.8' | '8' | '11'
+        try:
+            v = int(num[2:].split(".")[0]) if num.startswith("1.") and len(num) > 2 else int(num.split(".")[0])
+        except ValueError:
+            continue
+        if v in (8, 11, 17, 21, 25):                       # 1.8 -> 8 (classic Java-8 notation)
+            vs.append(v)
     return max(vs) if vs else None
 
 out = []
