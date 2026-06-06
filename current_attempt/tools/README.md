@@ -14,9 +14,10 @@ Active toolset for the current attempt (manual-only `bump-java-version` skill + 
   *to be consolidated with `sample_shas.py` / `annotate_stars.py`.*
 
 ## Demand (P12)
-- **`find_bump_issues.py`** — search GitHub for OPEN issues asking to bump the Java/JDK version
-  (title-matched, `language:java`), dedup per repo, rank by stars -> `bump_issues.json`.
-- **`filter_bump_issues.py`** — filter to genuine JDK-version bumps (drop dependency/API-migration noise).
+- **`find_bump_issues.py`** — the P12 request feed: OPEN GitHub issues asking to bump the Java/JDK version
+  (title-matched, `language:java`), filtered to genuine bumps and enriched with the triage signals P12 needs —
+  **stars**, **maintenance** (pushedAt/archived; dead repos dropped), and a **genuinely-unsatisfied** check
+  (current Java version via the root pom vs the requested target; stale-open requests dropped) -> `bump_issues.json`.
 
 ## Substrate
 - **`observe_rotate.py`** — size-rotates the `/var/log/observe/*` sinks (P6/P10).
