@@ -13,6 +13,7 @@ One row per acted-on request. Kept in sync as PRs are opened / merged / bailed.
 | tpiekarski/coupon-engine | 15 | [#5](https://github.com/tpiekarski/coupon-engine/issues/5) | 8→11 | jacoco 0.7.7→0.8.14, +`jakarta.inject-api`, `Path.of` | 40/40 | [#18](https://github.com/tpiekarski/coupon-engine/pull/18) | open |
 | Quinimbus/CLI | 1 | [#35](https://github.com/Quinimbus/CLI/issues/35) | 21→25 | release+maven-compiler-plugin, 3 CI workflows | 1/1 | [#45](https://github.com/Quinimbus/CLI/pull/45) | open |
 | simbo1905/shamir | 16 | [#1](https://github.com/simbo1905/shamir/issues/1) | 17→21 | source/target + Guava 27→29 | 23/23 | [#3](https://github.com/simbo1905/shamir/pull/3) | open |
+| monodot/hello-java-spring-boot | 10 | [#6](https://github.com/monodot/hello-java-spring-boot/issues/6) | 11→17 | java.version + Dockerfile (openjdk→temurin) | 1/1 | [#10](https://github.com/monodot/hello-java-spring-boot/pull/10) | open |
 
 ## Bailed (no clean PASS → no PR, per P12 discipline)
 
