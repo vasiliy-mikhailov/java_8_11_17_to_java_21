@@ -35,7 +35,7 @@ Each run clones the repo, copies the skill in read-only as `.bump-skill/`, lets 
 
 ## How this project was built — with AI
 
-This skill wasn't written by hand. An AI agent (Claude) **evolved** it across the attempts below against a corpus of real GitHub repos, via a reflective loop: draft the skill → run it through the three-agent panel → read where the agents fail or disagree → tighten the manual → keep the change only if it doesn't regress the corpus. The full method — ten interlocking *Problems* (P1–P10: the skill, the per-repo escalation panel, the dataset sampler, and the substrate that runs it) — is specified in **[`AGENTS.md`](AGENTS.md)**; the attempt-by-attempt trajectory with per-repo results lives under **`attempt_*/`**. The baseline each repo is measured against is the one-shot `org.openrewrite.java.migrate.UpgradeToJava<jv_to>` recipe — what an unsuspecting maintainer would do.
+This skill wasn't written by hand. An AI agent (Claude) **evolved** it across the attempts below against a corpus of real GitHub repos, via a reflective loop on a **two-rung ladder** — first Claude + Opus 4.8 (the strong rung, which separates *genuinely unfixable* from *needs a new recipe*), then the production **three-agent panel** (the same Qwen-27B through `opencode`/`kilocode`/`openhands`): draft the skill → run it down both rungs → read where it fails or the agents disagree → tighten the manual at the stronger rung so it survives the weaker → keep the change only if it doesn't regress the corpus. The full method — ten interlocking *Problems* (P1–P10: the skill, the per-repo escalation panel, the dataset sampler, and the substrate that runs it) — is specified in **[`AGENTS.md`](AGENTS.md)**; the attempt-by-attempt trajectory with per-repo results lives under **`attempt_*/`**. The baseline each repo is measured against is the one-shot `org.openrewrite.java.migrate.UpgradeToJava<jv_to>` recipe — what an unsuspecting maintainer would do.
 
 <details>
 <summary><b>Pass rate by attempt</b> — the trajectory</summary>
@@ -116,9 +116,11 @@ reachable via SSH alias `mh` at `$HOME/java_8_11_17_to_java_21`. Write a fresh
    `current_attempt/portability/agent_drive_one.sh` and `agent_sweep.py`; show the
    commands and the latest panel result).
 3. ## How this project was built — with AI — SMALL. A few sentences: the skill was
-   evolved by an AI agent (Claude) across the attempts via a reflective loop
-   (draft → run through the 3-agent panel → read failures/disagreement → tighten →
-   keep only non-regressing changes); point to `AGENTS.md` for the full method (ten
+   evolved by an AI agent (Claude) across the attempts via a reflective loop on a
+   two-rung ladder — first Claude+Opus 4.8, then the production three-agent panel
+   (opencode/kilocode/openhands on the same Qwen): draft → run it down both rungs →
+   read failures/disagreement → tighten at the stronger rung so it survives the
+   weaker → keep only non-regressing changes; point to `AGENTS.md` for the full method (ten
    Problems P1–P10) and `attempt_*/` for the trajectory; name the one-shot
    `UpgradeToJava<jv_to>` baseline. Put the detail inside collapsible <details>
    blocks: (a) "Pass rate by attempt" — a mermaid chart plus a table with ONE ROW
