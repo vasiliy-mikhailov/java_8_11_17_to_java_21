@@ -10,6 +10,7 @@
 FROM eclipse-temurin:8-jdk-jammy   AS jdk8
 FROM eclipse-temurin:11-jdk-jammy  AS jdk11
 FROM eclipse-temurin:17-jdk-jammy  AS jdk17
+FROM eclipse-temurin:25-jdk-jammy  AS jdk25
 
 # Final image already has JDK 21 at /opt/java/openjdk
 FROM eclipse-temurin:21-jdk-jammy
@@ -25,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=jdk8   /opt/java/openjdk /opt/jdk/8
 COPY --from=jdk11  /opt/java/openjdk /opt/jdk/11
 COPY --from=jdk17  /opt/java/openjdk /opt/jdk/17
+COPY --from=jdk25  /opt/java/openjdk /opt/jdk/25
 RUN ln -s /opt/java/openjdk /opt/jdk/21
 
 # Maven and Gradle.
