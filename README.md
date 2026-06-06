@@ -1,6 +1,10 @@
 # java_8_11_17_to_java_21
 
-Automate the universal slice of migrating Java/Maven projects from Java 8 / 11 / 17 to Java 21, so humans only spend time on the per-project residual.
+Automate the universal slice of migrating Java/Maven projects one LTS step at a time (8→11, 11→17, 17→21, and now 21→25) so they still compile under the new JDK and every previously-passing test still passes — leaving humans only the per-project residual. The baseline every repo is measured against is the one-shot `org.openrewrite.java.migrate.UpgradeToJava<jv_to>` recipe.
+
+**Using the skill.** The deliverable is a single self-contained skill, `current_attempt/.agents/skills/bump-java-version/SKILL.md` — a standard-tools-only hand manual (JDKs, Maven, and OpenRewrite recipes from Maven Central; no project-specific scripts). Point any tool-using coding agent at it: it reads the manual and performs the bump by hand — record the baseline under the old JDK, make Lombok safe, run the OpenRewrite migration, apply the deterministic JDK-removal pom edits, then compile + test under the new JDK and conserve every test that passed before. Stage facts (repo, sha, `jv_from`, `jv_to`, workdir) are injected by the consumer's harness as a prepended header, never baked into the skill, so it stays portable across agents and harnesses.
+
+**Using it with three agents.** Production validation runs the same Qwen 27B headless through three unrelated off-the-shelf agents — `opencode`, `kilocode`, and `openhands` — on the IDENTICAL skill, via one unified harness (`current_attempt/portability/agent_drive_one.sh`, driven in bulk by `agent_sweep.py`, the agent being the only variable). Each agent clones a repo, reads the skill from a read-only `.bump-skill/` copied into its workdir, performs the bump, and the harness scores test conservation under `jv_to`; a stage PASSes only when the previously-passing tests all survive. Three stranger agents agreeing on the identical skill makes portability inherent, and any cross-agent disagreement pinpoints the instruction to tighten (see P2/P3 in `AGENTS.md`).
 
 ## Approach
 
@@ -145,7 +149,11 @@ You are extending a Java-21 migration project. The repo root is on a remote host
 reachable via SSH alias `mh` at `$HOME/java_8_11_17_to_java_21`. Write a fresh
 `README.md` at the repo root with these sections, in this order:
 
-1. Title + one-paragraph purpose.
+1. Title + an extended opening (a few short paragraphs): the purpose, then **how
+   to use the project and the `bump-java-version` skill** — point any tool-using
+   coding agent at `SKILL.md` and it performs the bump by hand — and **how to run
+   it with the three-agent panel** (`opencode`/`kilocode`/`openhands` on the
+   identical skill via `agent_drive_one.sh` / `agent_sweep.py`).
 2. Approach: name AGENTS.md's Problem cluster structure (meta = P1; recipe and
    its experimental setup = P2–P4; substrate = P5–P10). AGENTS.md numbers its ten
    concerns `Problem (Pn)`; note that a problem is a self-amplifying attractor —
@@ -160,8 +168,9 @@ reachable via SSH alias `mh` at `$HOME/java_8_11_17_to_java_21`. Write a fresh
    same Qwen, one harness). Per-repo trajectories persist under
    `attempt_N/per_repo_iter/<slug>/trajectory.json` and the baseline is the
    one-shot `UpgradeToJava<jv_to>` recipe.
-3. Results so far: a table of champion PASS rates across the attempts present
-   under `attempt_*/` directories (count `attempt_N/per_repo_iter/*/trajectory.json`
+3. Results so far: a table of champion PASS rates covering EVERY attempt present
+   under `attempt_*/` directories (one row per attempt, none omitted — each row
+   describes that attempt and its result) (count `attempt_N/per_repo_iter/*/trajectory.json`
    with `jq -r .final_verdict` for live numbers). For attempts 1–6 pull from
    that attempt's README.md / RESULTS.md / REPORT.md / recipes.yml. For attempts
    7–9 compute PASS rate from trajectory.json files. For the agent-driven attempts
