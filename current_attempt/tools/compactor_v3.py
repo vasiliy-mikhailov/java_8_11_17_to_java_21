@@ -166,13 +166,41 @@ def summarize_chunk(buf_chunk, prior_summary):
     return resp.get("compacted_summary","") or "", resp.get("sustained_anomalies",[]) or []
 
 
+_NORM = re.compile(r"[0-9a-f]{6,}|\d+|0x[0-9a-f]+")
+
+
+def _sig(b):
+    """Signature for collapsing repetitions: stream + source + message with the
+    variable bits (numbers, hex ids, veth names, pids, timestamps) masked out."""
+    e = b.get("e", {}) or {}
+    msg = e.get("msg") or e.get("name") or ""
+    key = str(e.get("file") or e.get("container") or "").rsplit("/", 1)[-1]
+    return (b.get("s"), key, _NORM.sub("#", str(msg))[:100])
+
+
+def collapse(buf):
+    """Collapse repeated events to one exemplar + a count, so the model condenses
+    distinct/anomalous signal (not 8000 identical avahi/container-churn lines).
+    This is the ~500x reduction: repetition is summarized as 'x N', not re-sent."""
+    groups = {}
+    for b in buf:
+        s = _sig(b)
+        g = groups.get(s)
+        if g is None:
+            groups[s] = dict(b); groups[s]["n"] = 1
+        else:
+            g["n"] += 1
+    return list(groups.values())
+
+
 def compact():
     global buffer, compacted_summary, last_deep
     prior_tok = approx_tokens(compacted_summary or "")
     chunk_cap = max(HARD_CAP - prior_tok - 1000, 10000)  # reserve room for prior + wrappers
-    chunks = chunk_buffer(buffer, chunk_cap)
+    collapsed = collapse(buffer)  # dedup repetitions -> only distinct/anomalous events reach the model
+    chunks = chunk_buffer(collapsed, chunk_cap)
     total_tokens = sum(approx_tokens(_serialize(c)) for c in chunks)
-    print(f"COMPACT samples={len(buffer)} -> {len(chunks)} chunk(s), {total_tokens} tok, prior={prior_tok} tok", flush=True)
+    print(f"COMPACT samples={len(buffer)} -> {len(collapsed)} distinct -> {len(chunks)} chunk(s), {total_tokens} tok, prior={prior_tok} tok", flush=True)
     chunk_summaries, all_sustained = [], []
     for c in chunks:
         summ, sus = summarize_chunk(c, compacted_summary)
