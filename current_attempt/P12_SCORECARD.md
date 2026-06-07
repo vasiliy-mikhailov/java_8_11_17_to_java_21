@@ -24,6 +24,7 @@ Kept in sync as PRs are opened / merged / bailed.
 | codeforkjeff/conciliator | 126 | [#34](https://github.com/codeforkjeff/conciliator/issues/34) | **11→17→21 (P14 multi-step)** | chained both hops + **Spring Boot 2.7.3→3.3.13 / javax→jakarta** (`UpgradeSpringBoot_3_3`, version-aligned recipes) + JaCoCo 0.8.8→0.8.12 + Dockerfile both stages 11→21. _resolves #34 fully_ | 39/39 | [#38](https://github.com/codeforkjeff/conciliator/pull/38) | open |
 | thelastpickle/cassandra-reaper | 516 | [#1437](https://github.com/thelastpickle/cassandra-reaper/issues/1437) | **11→21 (P14 multi-step)** | compiler `release` 11→21 + enforcer `build.jdk.minimum` 11→21 + JaCoCo 0.8.6→0.8.12 + Mockito 4.4.0→5.14.2 (ByteBuddy/J21) + 2 Dockerfiles corretto 11→21. Dep `io.k8ssandra:datastax-mgmtapi-client-openapi` resolved from **GitHub Packages** (not Central); validated with **full `mvn install` incl. npm/webpack UI** | 516/516 | [#1687](https://github.com/thelastpickle/cassandra-reaper/pull/1687) | open |
 | filipvanlaenen/shecc | 2 | [#63](https://github.com/filipvanlaenen/shecc/issues/63) | 17→21 | `java.version` 17→21. **Bail recovery:** deps (`kolektoj`/`tsvgj`/`bltxmlepj`) are the author's sibling libs on no registry — built from source and **hand-deployed to Nexus `maven-releases`** | 120/120 | [#68](https://github.com/filipvanlaenen/shecc/pull/68) | open |
+| JExUnit/jexunit-core | 0 | [#3](https://github.com/JExUnit/jexunit-core/issues/3) | **8→11→17→21 (P14 multi-step)** | laddered all 3 LTS hops (pure, no framework wall) — compiler 8→21 (4 modules) + CI JDK + Lombok 1.18.46 + maven-compiler-plugin 3.15.0 + `new Double()`→`Double.valueOf()` | 12/12 | [#5](https://github.com/JExUnit/jexunit-core/pull/5) | open |
 
 ## Bailed (no clean PASS → no PR, per P12 discipline)
 
@@ -39,7 +40,7 @@ Kept in sync as PRs are opened / merged / bailed.
 
 ## Tally
 
-- **16 PRs opened** across 15 repos (incl. one hand-written tested HttpClient/AWS-v2 refactor and two **P14 multi-step** PRs: conciliator 11→21 w/ Spring Boot 2→3/jakarta, and cassandra-reaper ★516 11→21 w/ GitHub-Packages dep + full-`mvn install` UI validation), all 4 LTS hops covered, every bump verified green under the repo's own CI command.
+- **17 PRs opened** across 16 repos (incl. one hand-written tested HttpClient/AWS-v2 refactor and two **P14 multi-step** PRs: conciliator 11→21 w/ Spring Boot 2→3/jakarta, and cassandra-reaper ★516 11→21 w/ GitHub-Packages dep + full-`mvn install` UI validation), all 4 LTS hops covered, every bump verified green under the repo's own CI command.
 - **`detect_jv` finding** (from recovering cassandra-reaper, per the operator's "j11-gift" insight): the feed reads the compiler `source`/`target` (which projects set to an *old* version for bytecode compat) instead of the real build floor (enforcer `requireJavaVersion` / `release` / CI JDK), so multi-step requests can be mis-routed with a phantom extra hop. Fix candidate for P4: honor the enforcer floor when present.
 - **1 MERGED** (the primary reward — ground-truth adoption): `mars-sim/mars-sim` #1959 (21→25), merged by the maintainer with thanks. First demand PR landed.
 - **5 bailed** on P12 discipline (no green baseline / out of scope / unresolvable deps).
