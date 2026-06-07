@@ -21,6 +21,7 @@ Kept in sync as PRs are opened / merged / bailed.
 | agido-malter/logback-elasticsearch-appender | 24 | [#45](https://github.com/agido-malter/logback-elasticsearch-appender/issues/45) | 8→11 | compiler source/target→`release` 11 + CI JDK (gate=`mvn test`, the repo's CI; `verify` falsely fails on gpg-sign). Java-11 half of #45 | 24/24 | [#48](https://github.com/agido-malter/logback-elasticsearch-appender/pull/48) | open |
 | agido-malter/logback-elasticsearch-appender | 24 | [#45](https://github.com/agido-malter/logback-elasticsearch-appender/issues/45) | — (refactor) | **companion to #48, _resolves #45_**: `HttpURLConnection`→`java.net.http.HttpClient` (connection pooling) + AWS SigV4 v1→**SDK v2**. Hand-written, not a bump — validated by new tests (SigV4 known-answer, 4 WireMock transport, userInfo→Basic e2e) | 30/30 | [#49](https://github.com/agido-malter/logback-elasticsearch-appender/pull/49) | open |
 | rigd-loxia/builder-generator | 2 | [#36](https://github.com/rigd-loxia/builder-generator/issues/36) | 11→17 | compiler 11→17 (both modules) + maven-compiler-plugin 3.11→3.15 + **enforcer `EnforceBytecodeVersion` maxJdkVersion 11→17** (else it bans the project's own J17 annotations jar) + modernizer 1.11→1.17 | 45/45 | [#61](https://github.com/rigd-loxia/builder-generator/pull/61) | open |
+| codeforkjeff/conciliator | 126 | [#34](https://github.com/codeforkjeff/conciliator/issues/34) | **11→17→21 (P14 multi-step)** | chained both hops + **Spring Boot 2.7.3→3.3.13 / javax→jakarta** (`UpgradeSpringBoot_3_3`, version-aligned recipes) + JaCoCo 0.8.8→0.8.12 + Dockerfile both stages 11→21. _resolves #34 fully_ | 39/39 | [#38](https://github.com/codeforkjeff/conciliator/pull/38) | open |
 
 ## Bailed (no clean PASS → no PR, per P12 discipline)
 
@@ -34,7 +35,7 @@ Kept in sync as PRs are opened / merged / bailed.
 
 ## Tally
 
-- **13 PRs opened** across 12 repos (incl. one hand-written tested HttpClient/AWS-v2 refactor), all 4 LTS hops covered (8→11, 11→17, 17→21, 21→25), every bump verified green under the repo's own CI command (`mvn verify`, or `mvn test` where that is the repo's actual CI gate).
+- **14 PRs opened** across 13 repos (incl. one hand-written tested HttpClient/AWS-v2 refactor and the first **P14 multi-step** 11→21 with a Spring Boot 2→3/jakarta migration), all 4 LTS hops covered, every bump verified green under the repo's own CI command (`mvn verify`, or `mvn test` where that is the repo's actual CI gate).
 - **1 MERGED** (the primary reward — ground-truth adoption): `mars-sim/mars-sim` #1959 (21→25), merged by the maintainer with thanks. First demand PR landed.
 - **5 bailed** on P12 discipline (no green baseline / out of scope / unresolvable deps).
 - _Reward = merged PRs (primary)._ The feed's clean, resolvable tail is largely exhausted; re-run `find_bump_issues.py` later for fresh demand rather than grinding low-yield targets.

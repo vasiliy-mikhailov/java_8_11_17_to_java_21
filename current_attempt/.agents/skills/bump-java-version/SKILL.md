@@ -135,7 +135,9 @@ On any failure: find the first real `[ERROR]`, apply the matching fix below, `gi
 ## 6. Spring Boot upgrades (only when the failure points there)
 
 These are full upgrades — do them only if Troubleshooting sends you here, then re-run §3–§5. Same
-command shape as §3, recipe artifact `org.openrewrite.recipe:rewrite-spring:6.31.0`:
+command shape as §3, recipe artifact `org.openrewrite.recipe:rewrite-spring:6.31.0` — **keep this on
+the plugin's rewrite line** (6.x for `rewrite-maven-plugin:6.40.0`); a stale `rewrite-spring` (5.x/7.x)
+fails with a cryptic `ReplaceStringLiteralValue … is required` NPE (see §7):
 
 **Spring Boot 1.x → 2.7** (1.x can't run on JDK 11) — run under the OLD JDK:
 ```bash
@@ -166,6 +168,7 @@ This also performs the javax→jakarta and Spring Security 6 migrations.
 | `OutOfMemoryError` during tests (JHipster etc.) | **usually downstream** of a context-load failure | Fix the **first** real error first; only raise the surefire `-Xmx` if it's genuinely heap. |
 | `EmbeddedServletContainerException` / `spring-context-4.x`, bean-creation failures | Spring Boot 1.x can't run on JDK 11 | Do the **SB 1→2** upgrade (§6), then re-run. *(Apps with custom SB-1.x code on SB-2-removed APIs — e.g. WebGoat — won't compile on SB2; bail.)* |
 | `cannot find symbol: class WebSecurityConfigurerAdapter` | Spring Security 6 (only after going to SB3) | Do the **SB 2→3** upgrade (§6), which migrates it. |
+| `Recipe validation error … ReplaceStringLiteralValue … is required` / `NullPointerException` during `rewrite:run` (esp. an `UpgradeSpringBoot_3_x`) | `rewrite-spring` version is off the plugin's rewrite line (e.g. rewrite-7.x `rewrite-spring:5.x` against `rewrite-maven-plugin:6.40.0` = rewrite-8.x) | Use a coherent set: `rewrite-spring:6.31.0` with the 6.40.0 plugin. If you also pin `rewrite-migrate-java`, keep both from one `rewrite-recipe-bom` (e.g. `rewrite-spring:6.29.0` + `rewrite-migrate-java:3.32.0`). |
 | `jsonschema2pojo … ClassAlreadyExistsException` | stale generated classes in `target/` | `rm -rf target` (or `mvn clean`), re-run. |
 | Docker/Selenium/DB test errors (`Could not find a valid Docker environment`, Testcontainers, MariaDB4j) | needs infra the box lacks — failed in baseline too | Ignore — not a regression. |
 | no `pom.xml` at root | nested project | `find . -name pom.xml -not -path '*/target/*'`, `cd` into the shallowest, run steps there. |
