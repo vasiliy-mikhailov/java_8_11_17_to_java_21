@@ -29,12 +29,15 @@ STREAMS = {"host": f"{OBS_DIR}/host_metrics.jsonl",
 COMPACT_SYSTEM = (
     "You receive a rolling trajectory of host events with a prior compacted summary. "
     "Repeated events are pre-collapsed: each item carries \"n\" (occurrences), \"distinct\" (how many "
-    "distinct variants), \"variants\" (a sample of the differing values), and \"span\" ([first,last] time). "
-    "ALWAYS surface all of these — the count, the distinct variants, and the time span — e.g. "
+    "distinct variants), \"variants\" (a sample of the differing values), \"span\" ([first,last] time), "
+    "and \"last\" (the FULL text of the most recent occurrence). "
+    "ALWAYS surface the count, the distinct variants, and the time span — e.g. "
     "'SSH auth failures n=100 from 3 IPs (168.x, 118.x, ...) span 11:20-13:05', or "
     "'veth churn n=8400 across many interfaces, continuous'. A high n or many distinct variants is itself a signal. "
-    "Return JSON: {\"compacted_summary\":\"<paragraph ~20% of input; for each notable pattern/anomaly give its "
-    "n, its distinct variants, and its time span>\",\"sustained_anomalies\":[\"<fact with n, variants, span>\"]} "
+    "For any error/failure/anomaly group, ALSO quote its \"last\" text VERBATIM (do not truncate or paraphrase) "
+    "so the concrete latest example is preserved. "
+    "Return JSON: {\"compacted_summary\":\"<paragraph; for each notable pattern/anomaly give n, distinct variants, "
+    "span, and for errors the verbatim last text>\",\"sustained_anomalies\":[\"<fact with n, variants, span, and the verbatim last error text>\"]} "
     "JSON only, no prose.")
 
 
@@ -125,10 +128,10 @@ def tail_new_lines():
                                   "tags": ev.get("tags",{})}
                 elif stream == "docker":
                     compact_ev = {"container": ev.get("container_name"),
-                                  "msg": (ev.get("message") or "")[:200]}
+                                  "msg": (ev.get("message") or "")[:4000]}
                 else:
                     compact_ev = {"file": (ev.get("file","") or "").split("/")[-1],
-                                  "msg": (ev.get("message") or "")[:200]}
+                                  "msg": (ev.get("message") or "")[:4000]}
                 buffer.append({"t": t, "s": stream, "e": compact_ev})
         except Exception: pass
 
@@ -196,18 +199,20 @@ def collapse(buf):
         t = (b.get("t") or "")[:19]
         g = groups.get(s)
         if g is None:
-            groups[s] = {"n": 1, "s": b.get("s"), "span": [t, t], "variants": {msg}}
+            groups[s] = {"n": 1, "s": b.get("s"), "span": [t, t],
+                         "variants": {msg[:200]}, "last": msg}  # full text of latest occurrence
         else:
             g["n"] += 1
             if t and t < g["span"][0]: g["span"][0] = t
-            if t and t > g["span"][1]: g["span"][1] = t
+            if t and t >= g["span"][1]: g["span"][1] = t
+            g["last"] = msg  # buffer is time-ordered, so the final occurrence is the most recent
             if len(g["variants"]) < 64:
-                g["variants"].add(msg)
+                g["variants"].add(msg[:200])
     out = []
     for g in groups.values():
         v = list(g["variants"])
         out.append({"n": g["n"], "s": g["s"], "span": g["span"],
-                    "distinct": len(v), "variants": v[:8]})
+                    "distinct": len(v), "variants": v[:6], "last": g["last"]})
     return out
 
 
