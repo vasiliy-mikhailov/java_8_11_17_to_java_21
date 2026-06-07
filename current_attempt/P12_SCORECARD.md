@@ -20,6 +20,7 @@ Kept in sync as PRs are opened / merged / bailed.
 | mars-sim/mars-sim | 164 | [#1956](https://github.com/mars-sim/mars-sim/issues/1956) | 21→25 | `maven.compiler.source`/`target` 21→25 + 4 CI workflows | 721/721 | [#1959](https://github.com/mars-sim/mars-sim/pull/1959) | open |
 | agido-malter/logback-elasticsearch-appender | 24 | [#45](https://github.com/agido-malter/logback-elasticsearch-appender/issues/45) | 8→11 | compiler source/target→`release` 11 + CI JDK (gate=`mvn test`, the repo's CI; `verify` falsely fails on gpg-sign). Java-11 half of #45 | 24/24 | [#48](https://github.com/agido-malter/logback-elasticsearch-appender/pull/48) | open |
 | agido-malter/logback-elasticsearch-appender | 24 | [#45](https://github.com/agido-malter/logback-elasticsearch-appender/issues/45) | — (refactor) | **companion to #48, _resolves #45_**: `HttpURLConnection`→`java.net.http.HttpClient` (connection pooling) + AWS SigV4 v1→**SDK v2**. Hand-written, not a bump — validated by new tests (SigV4 known-answer, 4 WireMock transport, userInfo→Basic e2e) | 30/30 | [#49](https://github.com/agido-malter/logback-elasticsearch-appender/pull/49) | open |
+| rigd-loxia/builder-generator | 2 | [#36](https://github.com/rigd-loxia/builder-generator/issues/36) | 11→17 | compiler 11→17 (both modules) + maven-compiler-plugin 3.11→3.15 + **enforcer `EnforceBytecodeVersion` maxJdkVersion 11→17** (else it bans the project's own J17 annotations jar) + modernizer 1.11→1.17 | 45/45 | [#61](https://github.com/rigd-loxia/builder-generator/pull/61) | open |
 
 ## Bailed (no clean PASS → no PR, per P12 discipline)
 
@@ -33,6 +34,6 @@ Kept in sync as PRs are opened / merged / bailed.
 
 ## Tally
 
-- **11 PRs opened**, all 4 LTS hops covered (8→11, 11→17, 17→21, 21→25), every one verified green under the repo's own CI command (`mvn verify`, or `mvn test` where that is the repo's actual CI gate).
+- **13 PRs opened** across 12 repos (incl. one hand-written tested HttpClient/AWS-v2 refactor), all 4 LTS hops covered (8→11, 11→17, 17→21, 21→25), every bump verified green under the repo's own CI command (`mvn verify`, or `mvn test` where that is the repo's actual CI gate).
 - **5 bailed** on P12 discipline (no green baseline / out of scope / unresolvable deps).
 - _Reward = merged PRs (primary)._ The feed's clean, resolvable tail is largely exhausted; re-run `find_bump_issues.py` later for fresh demand rather than grinding low-yield targets.
