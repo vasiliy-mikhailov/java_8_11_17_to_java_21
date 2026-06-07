@@ -33,7 +33,8 @@ SLOW_LOG = f"{OUT_DIR}/slow.jsonl"
 OFFSETS_FILE = "/home/vmihaylov/.compactor.offsets"  # read positions, survive restarts
 STATE_FILE   = "/home/vmihaylov/.compactor.state"    # rolling layer states, so folds survive restarts
 
-OUTPUT_BUDGET = 8000     # cap on a digest's size; the model keeps it bounded by aging out stale anomalies
+OUTPUT_BUDGET = 4000     # max_tokens cap: bounds generation so a fold completes within the timeout even when
+                         # the MoE is slow (it drops to ~12 tok/s when GPU0's proposer saturates the box)
 NEW_BUDGET = 8000        # ~8k tokens of new (collapsed) events fed per FAST fold
 RECENT_KEEP = 8          # raw events kept after a fast fold (continuity for the next per-sample alarm)
 TAIL_INTERVAL_S = 5      # poll cadence (loop sleep only — NOT a compaction interval)
@@ -49,7 +50,7 @@ _SCHEMA = (
     "\"n\":<int>,\"distinct\":<int>,\"span\":[\"<first>\",\"<last>\"],"
     "\"last\":\"<verbatim full text of most recent occurrence>\","
     "\"params\":[{\"what\":\"<the value>\",\"n\":<int>,\"when\":[\"<first>\",\"<last>\"]}]}]} "
-    "Keep at most ~25 anomalies (most severe/active first); fold the rest into summary. JSON only, no prose.")
+    "Keep at most ~12 anomalies (most severe/active first); fold the rest into summary. Be concise. JSON only, no prose.")
 
 FAST_SYSTEM = (
     "You maintain the FAST rolling digest of host state — the most recent, fine-grained view. You get the "
@@ -106,7 +107,7 @@ def ask_qwen(system, user, max_tokens=OUTPUT_BUDGET):
         headers={"Authorization": "Bearer " + OBS_KEY, "Content-Type": "application/json"})
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=300) as r:
+            with urllib.request.urlopen(req, timeout=480) as r:
                 content = (json.loads(r.read())["choices"][0]["message"].get("content") or "").strip()
             obj = _extract_json(content)
             return obj if obj is not None else {"raw": content[:300]}
@@ -198,10 +199,10 @@ def tail_new_lines():
                                   "tags": ev.get("tags", {})}
                 elif stream == "docker":
                     compact_ev = {"container": ev.get("container_name"),
-                                  "msg": (ev.get("message") or "")[:4000]}
+                                  "msg": (ev.get("message") or "")[:1200]}
                 else:
                     compact_ev = {"file": (ev.get("file", "") or "").split("/")[-1],
-                                  "msg": (ev.get("message") or "")[:4000]}
+                                  "msg": (ev.get("message") or "")[:1200]}
                 buffer.append({"t": t, "s": stream, "e": compact_ev})
         except Exception: pass
 
@@ -263,7 +264,7 @@ def collapse(buf):
                 g["vars"][v] = [1, t, t]
     out = []
     for g in groups.values():
-        top = sorted(g["vars"].items(), key=lambda kv: -kv[1][0])[:6]
+        top = sorted(g["vars"].items(), key=lambda kv: -kv[1][0])[:3]
         params = [{"what": val, "n": cnt, "when": [first, last]} for val, (cnt, first, last) in top]
         out.append({"n": g["n"], "s": g["s"], "span": g["span"],
                     "distinct": len(g["vars"]), "last": g["last"], "params": params})
