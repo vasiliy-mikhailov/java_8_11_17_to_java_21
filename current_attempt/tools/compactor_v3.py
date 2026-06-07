@@ -27,13 +27,14 @@ STREAMS = {"host": f"{OBS_DIR}/host_metrics.jsonl",
            "app": f"{OBS_DIR}/app_logs.jsonl"}
 
 COMPACT_SYSTEM = (
-    "You receive a rolling trajectory of host events possibly with a prior compacted summary. "
-    "Repeated events are pre-collapsed: each event carries an integer field \"n\" = how many times "
-    "it occurred in this window. ALWAYS surface these counts in the output (e.g. 'veth churn n=8400', "
-    "'jboss SocketTimeout n=37') so frequency/repetition is visible — a high n is itself a signal. "
-    "Return JSON: {\"compacted_summary\":\"<paragraph compressing to ~20% of input, preserving "
-    "notable patterns, sustained anomalies, drifts, recurring failures, each with its n count>\","
-    "\"sustained_anomalies\":[\"<fact with n=count>\"]} "
+    "You receive a rolling trajectory of host events with a prior compacted summary. "
+    "Repeated events are pre-collapsed: each item carries \"n\" (occurrences), \"distinct\" (how many "
+    "distinct variants), \"variants\" (a sample of the differing values), and \"span\" ([first,last] time). "
+    "ALWAYS surface all of these — the count, the distinct variants, and the time span — e.g. "
+    "'SSH auth failures n=100 from 3 IPs (168.x, 118.x, ...) span 11:20-13:05', or "
+    "'veth churn n=8400 across many interfaces, continuous'. A high n or many distinct variants is itself a signal. "
+    "Return JSON: {\"compacted_summary\":\"<paragraph ~20% of input; for each notable pattern/anomaly give its "
+    "n, its distinct variants, and its time span>\",\"sustained_anomalies\":[\"<fact with n, variants, span>\"]} "
     "JSON only, no prose.")
 
 
@@ -149,14 +150,14 @@ def per_sample_alarm():
     print(f"ALARM: {alarm[:200]}", flush=True)
 
 
-def _serialize(buf): return "\n".join(json.dumps(b)[:300] for b in buf)
+def _serialize(buf): return "\n".join(json.dumps(b) for b in buf)
 
 
 def chunk_buffer(buf, chunk_token_cap):
     """Split buffer into time-ordered chunks whose serialization fits chunk_token_cap each."""
     chunks, cur, cur_tok = [], [], 0
     for b in buf:
-        t = approx_tokens(json.dumps(b)[:300])
+        t = approx_tokens(json.dumps(b))
         if cur and cur_tok + t > chunk_token_cap:
             chunks.append(cur); cur, cur_tok = [], 0
         cur.append(b); cur_tok += t
@@ -183,19 +184,31 @@ def _sig(b):
 
 
 def collapse(buf):
-    """Collapse repeated events to one exemplar + a count, so the model condenses
-    distinct/anomalous signal (not 8000 identical avahi/container-churn lines).
-    This is the ~500x reduction: repetition is summarized as 'x N', not re-sent."""
+    """Collapse repeats into one group that carries the count AND the variations behind
+    the masked signature + the time span — so the model can say e.g. 'SSH auth failures
+    n=100 from 3 IPs (a,b,c), span 11:20-13:05', not just 'n=100'. This is the ~100-500x
+    reduction (repetition summarized, not re-sent) while keeping the distinct variants."""
     groups = {}
     for b in buf:
         s = _sig(b)
+        e = b.get("e", {}) or {}
+        msg = e.get("msg") or e.get("name") or json.dumps(e)
+        t = (b.get("t") or "")[:19]
         g = groups.get(s)
         if g is None:
-            # "n" first so the count survives the per-event serialization truncation
-            groups[s] = {"n": 1, "s": b.get("s"), "t": b.get("t"), "e": b.get("e")}
+            groups[s] = {"n": 1, "s": b.get("s"), "span": [t, t], "variants": {msg}}
         else:
             g["n"] += 1
-    return list(groups.values())
+            if t and t < g["span"][0]: g["span"][0] = t
+            if t and t > g["span"][1]: g["span"][1] = t
+            if len(g["variants"]) < 64:
+                g["variants"].add(msg)
+    out = []
+    for g in groups.values():
+        v = list(g["variants"])
+        out.append({"n": g["n"], "s": g["s"], "span": g["span"],
+                    "distinct": len(v), "variants": v[:8]})
+    return out
 
 
 def compact():
@@ -236,7 +249,7 @@ def main():
         tail_new_lines()
         if buffer:
             per_sample_alarm()
-            buf_text = "\n".join(json.dumps(b)[:300] for b in buffer)
+            buf_text = "\n".join(json.dumps(b) for b in buffer)
             buf_tokens = approx_tokens((compacted_summary or "") + buf_text)
             if (buf_tokens >= COMPACT_AT or (time.time() - last_deep) >= DEEP_REVIEW_S) and len(buffer) >= 20:
                 compact()
