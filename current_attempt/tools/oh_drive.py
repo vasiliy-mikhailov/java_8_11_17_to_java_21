@@ -115,7 +115,7 @@ def main():
         base_url=os.environ['PROPOSER_BASE_URL'],
         api_key=SecretStr(os.environ['PROPOSER_API_KEY']),
         usage_id=f'oh_drive_{slug[:40]}',
-        max_output_tokens=4096,
+        max_output_tokens=32768,
         temperature=0.0,
         native_tool_calling=True,
         stream=True,
@@ -126,13 +126,13 @@ def main():
         base_url=os.environ['OPENHANDS_CONTEXT_COMPACTOR_BASE_URL'],
         api_key=SecretStr(os.environ['OPENHANDS_CONTEXT_COMPACTOR_API_KEY']),
         usage_id=f'oh_drive_condenser_{slug[:40]}',
-        max_output_tokens=4096,
+        max_output_tokens=32768,
         temperature=0.0,
         native_tool_calling=False,
         stream=True,
         timeout=900,
     )
-    condenser = LLMSummarizingCondenser(llm=compactor_llm, max_size=40, keep_first=2)
+    condenser = LLMSummarizingCondenser(llm=compactor_llm, max_tokens=210000, max_size=10000, keep_first=2)
     _merged = {}
     for _d in load_skills_from_dir(SKILLS_DIR):
         if isinstance(_d, dict): _merged.update(_d)
