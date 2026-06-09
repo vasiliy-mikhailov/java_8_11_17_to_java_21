@@ -9,9 +9,10 @@ Active toolset for the current attempt (manual-only `bump-java-version` skill + 
   container. Emits `{repo, sha, jv_from}` (jv_to = next LTS, derived).
 - **`annotate_stars.py`** — backfill each baseline with its repo's GitHub stargazer count (batched
   GraphQL); adds the `stars` field.
-- **`gh_discover_8_11.py`**, **`star_rank.py`**, **`verify_green2.py`** — GitHub code-search discovery +
-  star-ranking + green-baseline (`mvn test`) verification. Predecessors of the current dataset build;
-  *to be consolidated with `sample_shas.py` / `annotate_stars.py`.*
+- **`star_rank.py`**, **`verify_green2.py`** — star-ranking + green-baseline (`mvn test`)
+  verification. Predecessors of the current dataset build; *to be consolidated with `sample_shas.py` /
+  `annotate_stars.py`.* GitHub code-search discovery now lives as scriptless text in the
+  `discover-bump-dataset` skill (no driver scripts).
 
 ## Demand (P12)
 - **`find_bump_issues.py`** — the P12 request feed: OPEN GitHub issues asking to bump the Java/JDK version
