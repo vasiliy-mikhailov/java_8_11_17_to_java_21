@@ -125,8 +125,9 @@ keeps the highest-signal baselines.
 
 - The fresh, **year-structured** baseline store is the per-year dig output (`{repo, sha, jv_from,
   year}`) over `corpus/discovered/all_candidates.txt`. (The legacy yearless `attempt_db.json` was retired.)
-- Draw the per-run **iter-db** `current_attempt/dataset-shas.json` (the sweep's active corpus, ~100
-  per hop) from that store with **≤1 sha per repo** — the eval needs repo-diverse, independent
+- Draw the per-run **iter-db** `current_attempt/dataset-shas.json` **afresh each round** with
+  `tools/draw_iter.py --seed <round>` — **100 random baselines, ≤1 sha per repo** from the store (not
+  a fixed upfront dataset; a moving target across rounds). The eval needs repo-diverse, independent
   datapoints; the store keeps the per-year multiples for volume.
 
 ---
