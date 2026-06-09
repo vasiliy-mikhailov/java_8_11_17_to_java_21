@@ -66,6 +66,22 @@ def detect_jv(wd):
             vs.append(v)
     return max(vs) if vs else None
 
+def detect_jv_gradle(wd):
+    import re, glob as _g
+    txt = ""
+    for f in (_g.glob(wd + "/build.gradle") + _g.glob(wd + "/build.gradle.kts")
+              + _g.glob(wd + "/*/build.gradle") + _g.glob(wd + "/*/build.gradle.kts")):
+        try: txt += open(f, errors="ignore").read() + "\n"
+        except Exception: pass
+    vs = []
+    vs += [int(m) for m in re.findall(r"JavaLanguageVersion\.of\(\s*(\d+)\s*\)", txt)]
+    vs += [8 for _ in re.findall(r"VERSION_1_8", txt)]
+    vs += [int(m) for m in re.findall(r"VERSION_(\d+)\b", txt)]
+    vs += [int(m) for m in re.findall(r"(?:source|target)Compatibility\s*=?\s*[\"\']?(?:1\.)?(\d{1,2})\b", txt)]
+    vs += [int(m) for m in re.findall(r"languageVersion\s*=\s*[\"\']?(\d{1,2})\b", txt)]
+    vs = [v for v in vs if v in (8, 11, 17, 21, 25)]
+    return max(vs) if vs else None
+
 def process_repo(repo):
     wd = "/tmp/samp_" + repo.replace("/", "_")
     reap(wd)
@@ -85,13 +101,18 @@ def process_repo(repo):
             break
         scanned += 1
         sh(f"git -C {wd} checkout -q {sha} 2>/dev/null", 60)
-        if not os.path.isfile(wd + "/pom.xml"):
+        is_mvn = os.path.isfile(wd + "/pom.xml")
+        is_gradle = os.path.isfile(wd + "/build.gradle") or os.path.isfile(wd + "/build.gradle.kts")
+        if not (is_mvn or is_gradle):
             continue
-        jv = detect_jv(wd)
+        jv = detect_jv(wd) if is_mvn else detect_jv_gradle(wd)   # prefer maven when both present
         if jv not in NEXT or jv in found:
             continue
         compiles += 1
-        rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} mvn -q -B -ntp -DskipTests test-compile", 600).returncode
+        if is_mvn:
+            rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} mvn -q -B -ntp -DskipTests test-compile", 600).returncode
+        else:
+            rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} WORK_DIR={wd} gradle -q testClasses", 900).returncode
         if rc == 0:
             found[jv] = sha
             print(f"  FOUND {repo} {sha[:8]} jv {jv}->{NEXT[jv]} ({len(found)}/{target_n}, attempt {compiles}/{MAX_ATTEMPTS})", flush=True)

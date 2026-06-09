@@ -130,11 +130,13 @@ keeps the highest-signal baselines.
 
 - **Code-search is a floor, not a census:** default branch + indexed repos only; misses versions set
   in a parent POM or convention plugin. Dedup is only as good as §1 — rebuild `known.txt` each run.
-- **Gradle validation/bump is the open frontier.** The compile check in §3 is written but
-  **untested**; the wrapper↔JDK compatibility is the footgun — build + run it against a real
-  `gradle_j*_fresh.txt` repo before trusting it. The Gradle *bump* (OpenRewrite via the
-  `rewrite-gradle-plugin` init-script + `gradle rewriteRun`, conserve via `gradle test`) and a Gradle
-  track in the `bump-java-version` SKILL.md are still to write — test-first.
+- **Gradle validation is built and verified** (~50% baseline hit-rate on J17 candidates). The
+  `$HOME/bin/gradle` wrapper (versioned at `tools/gradle_docker_wrapper.py`) runs Gradle inside
+  `j21-fitness` (`JDK={jv}` → `/opt/jdk/{jv}`, the repo’s own `gradlew`, cached `GRADLE_USER_HOME`),
+  and `sample_shas.py` auto-detects the build tool, parses the Gradle jv, and validates via `gradle
+  testClasses`. **Still open:** the Gradle *bump* (OpenRewrite `rewrite-gradle-plugin` init-script +
+  `gradle rewriteRun`, conserve via `gradle test`) and a Gradle track in the `bump-java-version`
+  SKILL.md — test-first.
 - **Already in `corpus/discovered/` (fresh new-unique, deduped this round):** Maven J17≈3431 J21≈3293;
   Gradle J17≈2900 J21≈2823 — far more than the ~100/hop the iter-db needs, so **validation (§3), not
   discovery, is now the bottleneck.**
