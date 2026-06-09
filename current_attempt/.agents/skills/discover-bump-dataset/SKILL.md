@@ -64,7 +64,7 @@ angle-bracket phrase).
 
 **Gradle** — run for **both** filenames (`.kts` is a distinct filename):
 `filename:build.gradle` and `filename:build.gradle.kts`, each with `"JavaLanguageVersion.of(N)"`
-(toolchain DSL, Groovy+Kotlin) and `"JavaVersion.VERSION_N"` (source/targetCompatibility).
+(toolchain DSL, Groovy+Kotlin) and `"JavaVersion.VERSION_N"` (source/targetCompatibility). **Java 8 is special in Gradle:** it is `JavaVersion.VERSION_1_8` and `sourceCompatibility = '1.8'` (not `_8`) — search those for J8.
 
 Run one query, paging until a page returns < 100:
 
