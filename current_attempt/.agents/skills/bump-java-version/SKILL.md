@@ -41,8 +41,10 @@ no DB, no network) are **not** your responsibility.
 
 ## 2. Make Lombok safe (if the project uses Lombok)
 
-Lombok **< 1.18.30** crashes `javac` 17/21 (`NoSuchFieldError: JCTree$JCImport.qualid`). Edit the
-pom: set the Lombok version (or the `lombok.version` property) to **1.18.30** or newer. Do this
+Lombok **< 1.18.30** crashes `javac` 17/21 (`NoSuchFieldError: JCTree$JCImport.qualid`); and Lombok
+**< 1.18.40** crashes `javac` **25** (`ExceptionInInitializerError: com.sun.tools.javac.code.TypeTag ::
+UNKNOWN`). Edit the pom: set the Lombok version (or the `lombok.version` property) to **1.18.30+** for
+JDK 17/21, **1.18.40+** for JDK 25 (a project already on 1.18.3x still needs the bump for 25). Do this
 **before** any step under the new JDK.
 
 ---
@@ -162,6 +164,7 @@ This also performs the javax→jakarta and Spring Security 6 migrations.
 | `Cannot define class using reflection` / `sun.misc.Unsafe.defineClass` / `MockitoException` (often then `OutOfMemoryError`) | old Mockito's shaded ByteBuddy uses removed `sun.misc.Unsafe` | Bump **Mockito** (not byte-buddy — it's shaded). Add **before** any BOM import in `<dependencyManagement>`: `org.mockito:mockito-core:2.23.4` + `org.objenesis:objenesis:3.2`. (Match the newest patch if the tests use the Mockito 3/4/5 API.) |
 | `ASM ClassReader failed to parse` / `Unsupported class file major version 61/65/69` | ByteBuddy/ASM too old for JDK 17/21/25 | Light: dM `net.bytebuddy:byte-buddy(:agent):1.14.12` (JDK 17/21; use the newest 2025+ release for JDK 25). If it's Spring's component-scan ASM (Spring 5.2.x / SB 2.0–2.1): do the **SB 2→3** upgrade (§6) instead. |
 | `ArrayIndexOutOfBoundsException: Index 1 out of bounds for length 1` from a `<clinit>` (Jadira; Hibernate Validator 5.x → "Failed to load ApplicationContext") | old lib parses `java.version`/`java.specification.version` as legacy `1.x` | Don't pass `-Djava.version=<major>` (let the JVM report its real version). If it's Hibernate Validator 5.x, bump it (`hibernate-validator` 6.2.5.Final). |
+| `ExceptionInInitializerError: com.sun.tools.javac.code.TypeTag :: UNKNOWN` during compile/testCompile | Lombok too old for the new JDK (esp. **JDK 25**) — a different symptom from the `JCImport.qualid` one, same root cause | Bump `lombok.version`: **1.18.30+** for 17/21, **1.18.40+** for 25. Applies even if the project is already on a 1.18.3x release. |
 | `Error injecting JarArchiver` / `ExceptionInInitializerError at JarArchiver.<init>` | old `maven-jar/war/assembly` plexus-archiver predates JDK 11 | Bump the plugin (`maven-jar-plugin ≥ 3.4.1`) or dM `org.codehaus.plexus:plexus-archiver:4.2.7`. |
 | `com.sun:tools:jar` not found / `tools.jar` systemPath | `tools.jar` removed in JDK 9 | Delete the `com.sun:tools` system-scoped dependency. If code uses `com.sun.tools.javac.*`: add `--add-exports jdk.compiler/com.sun.tools.javac.*=ALL-UNNAMED` to `maven-compiler-plugin` `<compilerArgs>` **and** surefire `<argLine>`, and use `<source>/<target>` (NOT `<release>`). |
 | `no Bean Validation provider could be found` | provider dropped | Add `org.hibernate.validator:hibernate-validator` (6.2.5.Final javax / 8.0.1.Final jakarta). |
