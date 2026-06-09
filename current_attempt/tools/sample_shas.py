@@ -1,9 +1,11 @@
 """attempt-12 sha-sampler: repo-list -> per-run randomized *valid* baselines.
 
 Contract: reads dataset-repos.json (repo names only), writes dataset-shas.json (the sampled
-baselines for this run; regenerated each round). For each repo, walk its commits in seeded-random
-order and accept the FIRST commit that (a) declares Java 8/11/17 in its pom AND (b) compiles
-under that JDK (`mvn test-compile`). Bounded by --max-attempts compile checks (default 10).
+baselines for this run; regenerated each round). For each repo, walk the MAIN (default) branch bucketed by commit YEAR; within each year randomly
+try up to --max-attempts (~10) commits and accept the first that compiles. jv_from is DERIVED from
+each commit's artifacts (pom.xml / build.gradle) -- no version specified; a year with no compiling
+commit in budget yields nothing. So one repo gives one baseline per buildable year on main (its
+migration arc). Maven (`mvn test-compile`) / Gradle (`gradle testClasses`) auto-detected.
 
 A different --seed => different random order => (usually) a different accepted sha, so the
 eval is a moving target the skill/recipes must generalize to. jv_to = next LTS (8->11, 11->17,
@@ -92,36 +94,49 @@ def process_repo(repo):
         sh(f'git clone -q -c credential.helper="!gh auth git-credential" https://github.com/{repo} {wd}', 600)
     if not os.path.isdir(wd + "/.git"):
         print("CLONE-FAIL", repo, flush=True); return []
-    commits = sh(f"git -C {wd} log --all --pretty=%H", 60).stdout.split()
-    random.Random(f"{SEED}:{repo}").shuffle(commits)
-    found = {}; compiles = 0; scanned = 0
-    target_n = len(NEXT) if MULTI else 1
-    for sha in commits:
-        if scanned >= SCAN_CAP or compiles >= MAX_ATTEMPTS or len(found) >= target_n:
-            break
-        scanned += 1
-        sh(f"git -C {wd} checkout -q {sha} 2>/dev/null", 60)
-        is_mvn = os.path.isfile(wd + "/pom.xml")
-        is_gradle = os.path.isfile(wd + "/build.gradle") or os.path.isfile(wd + "/build.gradle.kts")
-        if not (is_mvn or is_gradle):
-            continue
-        jv = detect_jv(wd) if is_mvn else detect_jv_gradle(wd)   # prefer maven when both present
-        if jv not in NEXT or jv in found:
-            continue
-        compiles += 1
-        if is_mvn:
-            rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} mvn -q -B -ntp -DskipTests test-compile", 600).returncode
-        else:
-            rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} WORK_DIR={wd} gradle -q testClasses", 900).returncode
-        if rc == 0:
-            found[jv] = sha
-            print(f"  FOUND {repo} {sha[:8]} jv {jv}->{NEXT[jv]} ({len(found)}/{target_n}, attempt {compiles}/{MAX_ATTEMPTS})", flush=True)
-        else:
-            print(f"  noncompile {repo} {sha[:8]} jv {jv} (attempt {compiles}/{MAX_ATTEMPTS})", flush=True)
+    db = sh(f"git -C {wd} rev-parse --abbrev-ref HEAD", 30).stdout.strip()
+    ref = db if db and db != "HEAD" else "HEAD"        # main/default branch only (commits to main), not --all
+    rows = sh(f"git -C {wd} log {ref} --date=format:%Y --pretty=format:'%H %cd'", 60).stdout.split("\n")
+    by_year = {}
+    for r in rows:                                     # bucket main commits by the year they landed
+        pp = r.split()
+        if len(pp) >= 2:
+            by_year.setdefault(pp[1], []).append(pp[0])
+    out = []
+    # For EACH year on main: randomly pick commits and try to compile, up to MAX_ATTEMPTS
+    # compile tries (~10). First that compiles is that year's baseline; if none in the budget, the
+    # year yields nothing. jv is DERIVED from each commit's artifacts (no version specified).
+    for year in sorted(by_year):
+        shas = by_year[year][:]
+        random.Random(f"{SEED}:{repo}:{year}").shuffle(shas)   # random pick WITHIN the year
+        tries = 0; scanned = 0
+        for sha in shas:
+            if tries >= MAX_ATTEMPTS or scanned >= SCAN_CAP:
+                break
+            scanned += 1
+            sh(f"git -C {wd} checkout -q {sha} 2>/dev/null", 60)
+            is_mvn = os.path.isfile(wd + "/pom.xml")
+            is_gradle = os.path.isfile(wd + "/build.gradle") or os.path.isfile(wd + "/build.gradle.kts")
+            if not (is_mvn or is_gradle):
+                continue
+            jv = detect_jv(wd) if is_mvn else detect_jv_gradle(wd)   # derive jv from the commit (prefer maven)
+            if jv not in NEXT:
+                continue
+            tries += 1
+            if is_mvn:
+                rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} mvn -q -B -ntp -DskipTests test-compile", 600).returncode
+            else:
+                rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} WORK_DIR={wd} gradle -q testClasses", 900).returncode
+            if rc == 0:
+                out.append({"repo": repo, "sha": sha, "jv_from": jv, "year": int(year), "attempts": tries})
+                print(f"  FOUND {repo} {sha[:8]} jv {jv}->{NEXT[jv]} year {year} (try {tries}/{MAX_ATTEMPTS})", flush=True)
+                break
+            else:
+                print(f"  noncompile {repo} {sha[:8]} jv {jv} year {year} (try {tries}/{MAX_ATTEMPTS})", flush=True)
     reap(wd)
-    if found:
-        return [{"repo": repo, "sha": sha, "jv_from": jv, "attempts": compiles} for jv, sha in sorted(found.items())]
-    print(f"  NO-VALID-BASELINE {repo} (scanned {scanned}, {compiles} compile attempts)", flush=True)
+    if out:
+        return out
+    print(f"  NO-VALID-BASELINE {repo} (no compiling year on main)", flush=True)
     return []
 
 WORKERS = int(arg("--workers", "1"))
