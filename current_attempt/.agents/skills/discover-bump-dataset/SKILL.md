@@ -95,10 +95,14 @@ git add current_attempt/corpus/discovered && git commit -m "discover: fresh J17 
 
 ## 3. Validate candidates → baselines
 
-A declared version isn't a baseline until it builds. For each candidate, **shallow-fetch unshallowed**
-(so commit history is real), walk commits in **seeded-random** order, and accept the **first** commit
-that test-compiles under its `jv_from`. Cheap-reject for free: no build file, or already ≥ `jv_to`.
-Cap ~10 compile attempts and a scan cap on commits inspected.
+A declared version isn't a baseline until it builds — and we capture a repo's **whole migration arc**,
+not one point. For each candidate: clone, then walk the **main/default branch only** (not `--all`) and
+**bucket commits by year**. For each year, randomly try up to `--max-attempts` (~10) commits; the
+**`jv_from` is derived** from each commit's own artifacts (`pom.xml`/`build.gradle` — no version
+specified), cheap-rejecting (no build file) for free; the **first that test-compiles** is that year's
+baseline, and a year with none in budget yields nothing ("if not, then not"). So one repo gives one
+baseline per buildable year on main — different years often capture different Java versions (its real
+8→11→17 history).
 
 The compile check, per build tool:
 
@@ -111,7 +115,7 @@ JAVA_HOME=<jdk_from> ./gradlew -q --no-daemon testClasses
 ```
 
 `test-compile`/`testClasses` (main+test) is the validity bar — never admit a baseline whose tests
-don't even compile. Record each accepted `{repo, sha, jv_from, stars}` (stars via
+don't even compile. Record each accepted `{repo, sha, jv_from, year, stars}` (stars via
 `gh api repos/<owner>/<name> --jq .stargazers_count`). Sample **most-stars-first** so a bounded run
 keeps the highest-signal baselines.
 
@@ -119,10 +123,11 @@ keeps the highest-signal baselines.
 
 ## 4. Fold into the corpus
 
-- Merge accepted baselines into the **attempt-db** `current_attempt/corpus/attempt_db.json` (repo+sha
-  keyed by `jv_from`) — the cache of every baseline ever mined.
+- The fresh, **year-structured** baseline store is the per-year dig output (`{repo, sha, jv_from,
+  year}`) over `corpus/discovered/all_candidates.txt`. (The legacy yearless `attempt_db.json` was retired.)
 - Draw the per-run **iter-db** `current_attempt/dataset-shas.json` (the sweep's active corpus, ~100
-  per hop) from the attempt-db rather than re-digging. Dig only the thin cells.
+  per hop) from that store with **≤1 sha per repo** — the eval needs repo-diverse, independent
+  datapoints; the store keeps the per-year multiples for volume.
 
 ---
 
