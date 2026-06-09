@@ -62,6 +62,11 @@ def detect_jv_gradle(text):
     vs += [int(m) for m in re.findall(r"(?:source|target)Compatibility\s*=?\s*[\"\']?(?:1\.)?(\d{1,2})\b", text)]
     vs += [int(m) for m in re.findall(r"languageVersion\s*=\s*[\"\']?(\d{1,2})\b", text)]
     vs += [int(m) for m in re.findall(r"jvmToolchain\(\s*(\d{1,2})\s*\)", text)]
+    vs += [int(m) for m in re.findall(r"JavaVersion\.toVersion\(\s*[\"\']?(?:1\.)?(\d{1,2})", text)]
+    vs += [int(m) for m in re.findall(r"options\.release\D{0,8}(\d{1,2})", text)]
+    vs += [int(m) for m in re.findall(r"\brelease\.set\(\s*(\d{1,2})", text)]
+    # gradle.properties / ext key=value: javaVersion=17, java.version=17, jdkVersion=17, jvmTarget=17
+    vs += [int(m) for m in re.findall(r"(?:javaVersion|java\.version|jdkVersion|jvmTarget|javaLanguageVersion)\s*=\s*[\"\']?(?:1\.)?(\d{1,2})\b", text, re.I)]
     vs = [v for v in vs if v in (8, 11, 17, 21, 25)]
     return max(vs) if vs else None
 
@@ -134,12 +139,18 @@ for rp, it in byrepo.items():
         build_tool = "maven"
         cur = detect_jv(pom)
     else:
-        for gf in ("build.gradle", "build.gradle.kts"):
-            gtxt = _fetch_text(rp, gf)
-            if gtxt is not None:
+        # Gradle: the Java version may live in the root build file, gradle.properties,
+        # an Android app/ module, or a buildSrc convention plugin -- gather all cheap spots.
+        gtxt = ""
+        for gf in ("build.gradle", "build.gradle.kts", "gradle.properties",
+                   "app/build.gradle", "app/build.gradle.kts",
+                   "buildSrc/build.gradle", "buildSrc/build.gradle.kts"):
+            t = _fetch_text(rp, gf)
+            if t is not None:
                 build_tool = "gradle"
-                cur = detect_jv_gradle(gtxt)
-                break
+                gtxt += t + "\n"
+        if build_tool == "gradle":
+            cur = detect_jv_gradle(gtxt)
     if target and cur is not None:
         status = "satisfied(stale-open)" if cur >= target else "unsatisfied"
     elif cur is None:
