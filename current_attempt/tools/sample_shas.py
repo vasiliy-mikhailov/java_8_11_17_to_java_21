@@ -32,6 +32,7 @@ REPOS_FILE = arg("--repos-file"); OUT = arg("--out")
 ONLY = arg("--only-from")  # restrict to a single jv_from (e.g. 21 for the 21->25 sweep)
 NEXT = {int(ONLY): NEXT_ALL[int(ONLY)]} if ONLY else NEXT_ALL
 MULTI = "--multi" in sys.argv   # find a baseline per Java version, not just the first
+MIN_TESTS = int(arg("--min-tests", "0"))   # admit only baselines whose @Test count >= this (0 = off)
 if REPOS_FILE:
     REPOS = [r.strip() for r in open(REPOS_FILE) if r.strip()]
 elif REPOS_OVERRIDE:
@@ -84,6 +85,58 @@ def detect_jv_gradle(wd):
     vs = [v for v in vs if v in (8, 11, 17, 21, 25)]
     return max(vs) if vs else None
 
+def count_tests(wd):
+    # static proxy for "how many tests": count @Test-family annotations (java/kotlin) plus Spock
+    # feature methods (groovy) across the tree. No JVM run -- cheap enough to gate BEFORE compiling.
+    import re as _re
+    ann = _re.compile(r"@(?:Test|ParameterizedTest|RepeatedTest|TestFactory|TestTemplate)\b")
+    spock = _re.compile(r'def\s+"[^"]+"\s*\(')
+    n = 0
+    for base, _dirs, files in os.walk(wd):
+        if os.sep + ".git" in base:
+            continue
+        for fn in files:
+            p = os.path.join(base, fn)
+            try:
+                if fn.endswith((".java", ".kt")):
+                    n += len(ann.findall(open(p, errors="ignore").read()))
+                elif fn.endswith(".groovy"):
+                    n += len(spock.findall(open(p, errors="ignore").read()))
+            except Exception:
+                pass
+    return n
+
+
+def detect_mock(wd):
+    # record which mocking frameworks the repo declares/imports, so the corpus is sliceable on
+    # mock-relevance (the 21->25 ByteBuddy/Mockito wall). Cheap -- run once per ADMITTED baseline.
+    import glob as _g
+    fr = set()
+    deps = ""
+    for pat in ("/pom.xml", "/build.gradle", "/build.gradle.kts", "/*/pom.xml", "/*/build.gradle",
+                "/*/build.gradle.kts", "/gradle/libs.versions.toml", "/*/gradle/libs.versions.toml"):
+        for fp in _g.glob(wd + pat):
+            try: deps += open(fp, errors="ignore").read() + "\n"
+            except Exception: pass
+    low = deps.lower()
+    for name in ("mockito", "easymock", "powermock", "jmockit"):
+        if name in low:
+            fr.add(name)
+    if not fr:                                  # build files terse -> fall back to test-source imports
+        for base, _d, files in os.walk(wd):
+            if os.sep + ".git" in base:
+                continue
+            for fn in files:
+                if not fn.endswith((".java", ".kt")):
+                    continue
+                try: t = open(os.path.join(base, fn), errors="ignore").read()
+                except Exception: continue
+                if "org.mockito" in t: fr.add("mockito")
+                if "org.easymock" in t: fr.add("easymock")
+                if "org.powermock" in t: fr.add("powermock")
+    return sorted(fr)
+
+
 def process_repo(repo):
     wd = "/tmp/samp_" + repo.replace("/", "_")
     reap(wd)
@@ -122,14 +175,19 @@ def process_repo(repo):
             jv = detect_jv(wd) if is_mvn else detect_jv_gradle(wd)   # derive jv from the commit (prefer maven)
             if jv not in NEXT:
                 continue
+            ntests = count_tests(wd)                                 # cheap static @Test count BEFORE the costly compile
+            if MIN_TESTS and ntests < MIN_TESTS:
+                print(f"  skip-lowtest {repo} {sha[:8]} jv {jv} year {year} tests={ntests}<{MIN_TESTS}", flush=True)
+                continue
             tries += 1
             if is_mvn:
-                rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} mvn -q -B -ntp -DskipTests test-compile", 600).returncode
+                rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && INNER_TIMEOUT=570 JDK={jv} mvn -q -B -ntp -DskipTests test-compile", 600).returncode
             else:
-                rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && JDK={jv} WORK_DIR={wd} gradle -q testClasses", 900).returncode
+                rc = sh(f"export PATH=$HOME/bin:$PATH; cd {wd} && INNER_TIMEOUT=870 JDK={jv} WORK_DIR={wd} gradle -q testClasses", 900).returncode
             if rc == 0:
-                out.append({"repo": repo, "sha": sha, "jv_from": jv, "year": int(year), "attempts": tries})
-                print(f"  FOUND {repo} {sha[:8]} jv {jv}->{NEXT[jv]} year {year} (try {tries}/{MAX_ATTEMPTS})", flush=True)
+                mk = detect_mock(wd)
+                out.append({"repo": repo, "sha": sha, "jv_from": jv, "year": int(year), "attempts": tries, "tests": ntests, "mock": mk})
+                print(f"  FOUND {repo} {sha[:8]} jv {jv}->{NEXT[jv]} year {year} tests={ntests} mock={mk} (try {tries}/{MAX_ATTEMPTS})", flush=True)
                 break
             else:
                 print(f"  noncompile {repo} {sha[:8]} jv {jv} year {year} (try {tries}/{MAX_ATTEMPTS})", flush=True)
